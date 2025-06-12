@@ -3,7 +3,7 @@
 # Quick Setup for streamlit
 
 ```bash
-pip install streamlit
+pip install streamlit pandas matplotlib seaborn
 ```
 
 To run the app, simply enter the following command in your terminal:
