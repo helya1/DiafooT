@@ -30,8 +30,13 @@ if df is not None:
     st.write("### Data Preview:")
     st.dataframe(df)
 
-    # Save current data for external analysis
-    df.to_csv("latest_data.csv", index=False)
+    # Add a button for saving the data
+    if st.button("Save Data"):
+        try:
+            df.to_csv("latest_data.csv", index=False)
+            st.success("Data saved successfully to 'latest_data.csv'.")
+        except Exception as e:
+            st.error(f"Error saving the data: {e}")
 
 else:
     st.info("No data available to display.")
