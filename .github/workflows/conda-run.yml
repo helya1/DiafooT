@@ -1,4 +1,4 @@
-name: Python Conda Workflow
+name: Python Package using Conda
 
 on: [push]
 
@@ -7,35 +7,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v1
-        with:
-          python-version: 3.10
-          auto-activate-base: true
-          activate-environment: base
-          auto-update-conda: false
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v1
+      with:
+        python-version: 3.10
+        auto-activate-base: true
+        activate-environment: base
+        auto-update-conda: false
+        use-only-tar-bz2: true
 
-      - name: Install pip + dependencies
-        run: |
-          conda install -y pip
-          pip install -r requirements.txt
+    - name: Install pip and project dependencies
+      run: |
+        conda install -y pip
+        pip install -r requirements.txt
 
-      - name: Run Python scripts
-        run: |
-          python app.py || true
-          python dashboard.py || true
-          python analysis.py || true
+    - name: Run Python scripts
+      run: |
+        if [ -f app.py ]; then python app.py; fi
+        if [ -f dashboard.py ]; then python dashboard.py; fi
+        if [ -f main.py ]; then python main.py; fi
 
-      - name: Execute Jupyter notebook
-        run: |
-          conda install -y nbconvert ipykernel
-          jupyter nbconvert --to notebook --execute script2.ipynb --output executed.ipynb
-          jupyter nbconvert --to html executed.ipynb --output notebook_output.html
+    - name: Execute Jupyter Notebooks
+      run: |
+        conda install -y nbconvert ipykernel
+        for nb in *.ipynb; do
+          jupyter nbconvert --to notebook --execute "$nb" --output "executed_$nb"
+        done
 
-      - name: Run pytest (optional)
-        run: |
-          conda install -y pytest
-          pytest || true
+    - name: Run tests
+      run: |
+        conda install -y pytest
+        pytest || echo "Tests failed but workflow continues"
