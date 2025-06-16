@@ -1,4 +1,4 @@
-name: Python Package using Conda
+name: Python Package using pip
 
 on: [push]
 
@@ -10,34 +10,32 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v1
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.10
-        auto-activate-base: true
-        activate-environment: base
-        auto-update-conda: false
-        use-only-tar-bz2: true
+        python-version: "3.10"
 
     - name: Install pip and project dependencies
       run: |
-        conda install -y pip
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
 
     - name: Run Python scripts
       run: |
         if [ -f app.py ]; then python app.py; fi
         if [ -f dashboard.py ]; then python dashboard.py; fi
-        if [ -f main.py ]; then python main.py; fi
+        if [ -f analysis.py ]; then python analysis.py; fi
+
+    - name: Install Jupyter tools
+      run: pip install nbconvert ipykernel
 
     - name: Execute Jupyter Notebooks
       run: |
-        conda install -y nbconvert ipykernel
         for nb in *.ipynb; do
           jupyter nbconvert --to notebook --execute "$nb" --output "executed_$nb"
         done
 
     - name: Run tests
       run: |
-        conda install -y pytest
+        pip install pytest
         pytest || echo "Tests failed but workflow continues"
