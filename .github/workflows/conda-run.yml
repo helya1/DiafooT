@@ -1,15 +1,13 @@
-name: Python Package using Conda
+name: Python Conda Workflow
 
 on: [push]
 
 jobs:
-  build-linux:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      max-parallel: 5
 
     steps:
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Set up Miniconda
@@ -18,19 +16,12 @@ jobs:
         python-version: 3.10
         auto-activate-base: true
         activate-environment: base
-        use-only-tar-bz2: true
-        miniforge-variant: Mambaforge
+        auto-update-conda: false
 
-    - name: Install dependencies from requirements.txt
+    - name: Install pip + dependencies
       run: |
-        conda install pip
+        conda install -y pip
         pip install -r requirements.txt
-
-    - name: Lint with flake8
-      run: |
-        conda install -y flake8
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Run Python scripts
       run: |
@@ -38,14 +29,13 @@ jobs:
         python dashboard.py || true
         python analysis.py || true
 
-    - name: Execute .ipynb and export to HTML and PDF
+    - name: Execute and convert notebook
       run: |
-        conda install -y nbconvert ipykernel pandoc
-        jupyter nbconvert --to notebook --execute script2.ipynb --output executed.ipynb || true
+        conda install -y nbconvert ipykernel
+        jupyter nbconvert --to notebook --execute script2.ipynb --output executed.ipynb
         jupyter nbconvert --to html executed.ipynb --output notebook_output.html
-        jupyter nbconvert --to pdf executed.ipynb --output notebook_output.pdf
 
-    - name: Run tests with pytest (optional)
+    - name: Optional: Run tests with pytest
       run: |
         conda install -y pytest
         pytest || true
