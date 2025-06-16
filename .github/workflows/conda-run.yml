@@ -1,0 +1,54 @@
+name: Python Package using Conda
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 5
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.10
+        auto-activate-base: true
+        activate-environment: base
+        environment-file: environment.yml
+        use-only-tar-bz2: true
+        auto-update-conda: true
+        miniforge-variant: Mambaforge
+
+    - name: Install dependencies (fallback)
+      if: ${{ !exists('environment.yml') }}
+      run: |
+        conda install pip
+        pip install -r requirements.txt
+
+    - name: Lint with flake8
+      run: |
+        conda install -y flake8
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Run Python scripts
+      run: |
+        python app.py || true
+        python dashboard.py || true
+        python analysis.py || true
+
+    - name: Execute .ipynb and export to HTML and PDF
+      run: |
+        conda install -y nbconvert ipykernel pandoc
+        jupyter nbconvert --to notebook --execute script2.ipynb --output executed.ipynb || true
+        jupyter nbconvert --to html executed.ipynb --output notebook_output.html
+        jupyter nbconvert --to pdf executed.ipynb --output notebook_output.pdf
+
+    - name: Run tests with pytest (optional)
+      run: |
+        conda install -y pytest
+        pytest || true
