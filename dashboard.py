@@ -7,144 +7,120 @@ from sklearn.linear_model import LinearRegression
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+st.set_page_config(page_title="DIAFOOT Dashboard", layout="wide")
 
-# --- Assume df and risk_values are loaded here ---
-df = pd.read_excel("_CR HDJ 13.xlsx", sheet_name="DIAFOOT", header=None)
+st.title("📊 ED Thickness & Hypodermis Ultrasound Analysis")
 
-# --- Retrieve IWGDF Risk Grades ---
-label_risk = "Grade de risque IWGDF"
-row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
-if row_risk.empty:
-    raise ValueError(f"Label '{label_risk}' not found.")
-idx_risk = row_risk.index[0]
-risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
-patient_numbers = pd.Series(range(1, len(risk_values) + 1), index=risk_values.index)
-
-# For demonstration, you need to prepare these variables beforehand.
-
-# ==== DATA PREPARATION FUNCTION ====
+uploaded_file = st.file_uploader("Upload Excel file with 'DIAFOOT' sheet", type=["xlsx"])
 
 @st.cache_data
 def prepare_data(df, risk_values):
-    # Extract ED thickness
+    # Extract ED
     ed_data = df.iloc[126:134, 1:1+len(risk_values)]
     ed_data.index = [
-        "ED SESA R (mm)",
-        "ED HALLUX R (mm)",
-        "ED TM5 R (mm)",
-        "ED Other R (mm)",
-        "ED SESA L (mm)",
-        "ED HALLUX L (mm)",
-        "ED TM5 L (mm)",
-        "ED Other L (mm)"
+        "ED SESA R (mm)", "ED HALLUX R (mm)", "ED TM5 R (mm)", "ED Other R (mm)",
+        "ED SESA L (mm)", "ED HALLUX L (mm)", "ED TM5 L (mm)", "ED Other L (mm)"
     ]
     df_ed = ed_data.T.apply(pd.to_numeric, errors='coerce')
 
-    # Extract hypodermis ultrasound
-    hypoderm_data = df.iloc[135:143, 1:1+len(risk_values)]
-    hypoderm_data.index = [
-        "US Hypoderme SESA R (mm)",
-        "US Hypoderme HALLUX R (mm)",
-        "US Hypoderme TM5 R (mm)",
-        "US Hypoderme Other R (mm)",
-        "US Hypoderme SESA L (mm)",
-        "US Hypoderme HALLUX L (mm)",
-        "US Hypoderme TM5 L (mm)",
-        "US Hypoderme Other L (mm)"
+    # Extract Hypodermis
+    hypo_data = df.iloc[135:143, 1:1+len(risk_values)]
+    hypo_data.index = [
+        "US Hypoderme SESA R (mm)", "US Hypoderme HALLUX R (mm)",
+        "US Hypoderme TM5 R (mm)", "US Hypoderme Other R (mm)",
+        "US Hypoderme SESA L (mm)", "US Hypoderme HALLUX L (mm)",
+        "US Hypoderme TM5 L (mm)", "US Hypoderme Other L (mm)"
     ]
-    df_hypo = hypoderm_data.T.apply(pd.to_numeric, errors='coerce')
+    df_hypo = hypo_data.T.apply(pd.to_numeric, errors='coerce')
 
     # Combine
-    df_combined = pd.concat([df_ed, df_hypo], axis=1)
-    df_combined = df_combined.dropna()
-
-    # Add Grade and Group
-    df_combined['Grade'] = risk_values.loc[df_combined.index].values
-    df_combined['Group'] = df_combined['Grade'].apply(
-        lambda x: 'A (Grades 0-1 😊👍)' if x in [0, 1] else 'B (Grades 2-3 ⚠️)'
-    )
+    df_combined = pd.concat([df_ed, df_hypo], axis=1).dropna()
+    df_combined["Grade"] = risk_values.loc[df_combined.index].values
+    df_combined["Group"] = df_combined["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
     return df_combined
 
-# === MAIN APP ===
-
-st.title("📊 Dashboard ED Thickness & Hypodermis Ultrasound Analysis")
-
-uploaded_file = st.file_uploader("Upload Excel file with DIAFOOT sheet", type=["xlsx"])
-
 if uploaded_file:
-    # Load the full Excel file
     df = pd.read_excel(uploaded_file, sheet_name="DIAFOOT", header=None)
 
-    # Get risk_values similarly to your method
+    # Get risk grades
     label_risk = "Grade de risque IWGDF"
     row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
     if row_risk.empty:
-        st.error(f"Label '{label_risk}' not found in the file.")
+        st.error(f"Label '{label_risk}' not found.")
+        st.stop()
+
+    idx_risk = row_risk.index[0]
+    risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
+
+    df_combined = prepare_data(df, risk_values)
+
+    # Filter by group
+    selected_group = st.radio("Choose a group for intra-group analysis:", ["A (Grades 0-1)", "B (Grades 2-3)"])
+    filtered = df_combined[df_combined["Group"] == selected_group]
+
+    if selected_group == "A (Grades 0-1)":
+        g1, g2 = 0, 1
     else:
-        idx_risk = row_risk.index[0]
-        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
-        patient_indices = risk_values.index
+        g1, g2 = 2, 3
 
-        df_combined = prepare_data(df, risk_values)
+    sub1 = filtered[filtered["Grade"] == g1]
+    sub2 = filtered[filtered["Grade"] == g2]
 
-        # Filter by Group
-        group_filter = st.multiselect(
-            "Select Risk Group(s):",
-            options=df_combined['Group'].unique(),
-            default=df_combined['Group'].unique()
-        )
-        df_filtered = df_combined[df_combined['Group'].isin(group_filter)]
+    st.write(f"### 📋 Data Overview - Group {selected_group}")
+    st.dataframe(filtered)
 
-        st.write(f"### Selected Data ({len(df_filtered)} patients):")
-        st.dataframe(df_filtered)
-
-        # --- T-test ---
-        st.subheader("📊 T-test Results Between Groups")
-        group_a = df_combined[df_combined['Group'].str.startswith('A')]
-        group_b = df_combined[df_combined['Group'].str.startswith('B')]
-
+    if sub1.empty or sub2.empty:
+        st.warning(f"Not enough data to compare Grade {g1} and Grade {g2}. Showing available data.")
+        if not sub1.empty:
+            st.write(f"**Grade {g1}** ({len(sub1)} patients)")
+            st.dataframe(sub1)
+        if not sub2.empty:
+            st.write(f"**Grade {g2}** ({len(sub2)} patients)")
+            st.dataframe(sub2)
+    else:
+        st.subheader(f"📊 T-test: Grade {g1} vs Grade {g2} in Group {selected_group}")
         ttest_results = []
-        for col in df_combined.columns[:-2]:
-            t_stat, p_val = ttest_ind(group_a[col], group_b[col], equal_var=False, nan_policy='omit')
+        for col in filtered.columns[:-2]:
+            t_stat, p_val = ttest_ind(sub1[col], sub2[col], equal_var=False, nan_policy='omit')
             ttest_results.append({"Variable": col, "p-value": p_val})
         ttest_df = pd.DataFrame(ttest_results).sort_values("p-value")
+        st.dataframe(ttest_df.style.format({"p-value": "{:.4f}"}))
 
-        st.table(ttest_df.style.format({"p-value": "{:.4f}"}))
-
-        # --- Correlation matrix ---
-        st.subheader("📈 Correlation Matrix")
-        corr_matrix = df_filtered.drop(columns=['Group', 'Grade']).corr()
-        fig_corr, ax_corr = plt.subplots(figsize=(14,10))
-        sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", ax=ax_corr)
+    # Correlation matrix
+    st.subheader("📈 Correlation Matrix")
+    if len(filtered) >= 2:
+        corr = filtered.drop(columns=["Grade", "Group"]).corr()
+        fig_corr, ax_corr = plt.subplots(figsize=(12, 8))
+        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax_corr)
         st.pyplot(fig_corr)
+    else:
+        st.info("Not enough data to compute correlation matrix.")
 
-        # --- Linear Regression ---
-        st.subheader("🔁 Linear Regression to Predict Grade")
+    # Regression
+    st.subheader("🔁 Linear Regression to Predict Grade")
+    if len(filtered) >= 2:
+        X = filtered.drop(columns=["Grade", "Group"])
+        y = filtered["Grade"]
 
-        if len(df_filtered) < 2:
-            st.warning("Not enough data to perform regression.")
-        else:
-            X = df_filtered.drop(columns=['Grade', 'Group'])
-            y = df_filtered['Grade']
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
 
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X)
+        model = LinearRegression()
+        model.fit(X_scaled, y)
 
-            model = LinearRegression()
-            model.fit(X_scaled, y)
+        coef_df = pd.DataFrame({
+            "Feature": X.columns,
+            "Coefficient": model.coef_
+        }).sort_values(by="Coefficient", key=abs, ascending=False)
 
-            coeff_df = pd.DataFrame({
-                "Feature": X.columns,
-                "Coefficient": model.coef_
-            }).sort_values(by="Coefficient", key=abs, ascending=False)
+        st.dataframe(coef_df.style.format({"Coefficient": "{:.4f}"}))
 
-            st.dataframe(coeff_df.style.format({"Coefficient": "{:.4f}"}))
-
-            fig_reg, ax_reg = plt.subplots(figsize=(12,6))
-            sns.barplot(x="Coefficient", y="Feature", data=coeff_df, palette="cubehelix", ax=ax_reg)
-            ax_reg.set_title("Feature Importance in Grade Prediction")
-            st.pyplot(fig_reg)
+        fig_coef, ax_coef = plt.subplots(figsize=(10, 6))
+        sns.barplot(data=coef_df, x="Coefficient", y="Feature", ax=ax_coef, palette="viridis")
+        ax_coef.set_title("Feature Importance for Grade Prediction")
+        st.pyplot(fig_coef)
+    else:
+        st.warning("Not enough data to perform regression.")
 
 else:
-    st.info("Please upload an Excel file containing the DIAFOOT sheet.")
-
+    st.info("Please upload an Excel file containing the 'DIAFOOT' sheet.")
