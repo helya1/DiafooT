@@ -24,7 +24,7 @@ def prepare_data(df, risk_values):
     df_ed = ed_data.T.apply(pd.to_numeric, errors='coerce')
 
     # Extract Hypodermis
-    hypo_data = df.iloc[135:143, 1:1+len(risk_values)]
+    hypo_data = df.iloc[134:142, 1:1+len(risk_values)]
     hypo_data.index = [
         "US Hypoderme SESA R (mm)", "US Hypoderme HALLUX R (mm)",
         "US Hypoderme TM5 R (mm)", "US Hypoderme Other R (mm)",
@@ -86,6 +86,28 @@ if uploaded_file:
         ttest_df = pd.DataFrame(ttest_results).sort_values("p-value")
         st.dataframe(ttest_df.style.format({"p-value": "{:.4f}"}))
 
+    # Correlation with Grade
+    st.subheader("📈 Correlation with Grade")
+
+    if len(df_combined) >= 2:
+        # Remove Group column
+        corr_with_grade = df_combined.drop(columns=["Group"]).corr()["Grade"].drop("Grade")
+        
+        corr_df = corr_with_grade.reset_index()
+        corr_df.columns = ["Feature", "Correlation with Grade"]
+        corr_df = corr_df.sort_values("Correlation with Grade", key=abs, ascending=False)
+        
+        st.dataframe(corr_df.style.format({"Correlation with Grade": "{:.2f}"}))
+
+        fig_corr_grade, ax_corr_grade = plt.subplots(figsize=(10, 6))
+        sns.barplot(data=corr_df, y="Feature", x="Correlation with Grade", palette="coolwarm", ax=ax_corr_grade)
+        ax_corr_grade.set_title("Correlation of Each Feature with Grade")
+        st.pyplot(fig_corr_grade)
+    else:
+        st.info("Not enough data to compute correlation with Grade.")
+
+    
+    
     # Correlation matrix
     st.subheader("📈 Correlation Matrix")
     if len(filtered) >= 2:
