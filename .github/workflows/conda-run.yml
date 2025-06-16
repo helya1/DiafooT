@@ -7,35 +7,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v1
-      with:
-        python-version: 3.10
-        auto-activate-base: true
-        activate-environment: base
-        auto-update-conda: false
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v1
+        with:
+          python-version: 3.10
+          auto-activate-base: true
+          activate-environment: base
+          auto-update-conda: false
 
-    - name: Install pip + dependencies
-      run: |
-        conda install -y pip
-        pip install -r requirements.txt
+      - name: Install pip + dependencies
+        run: |
+          conda install -y pip
+          pip install -r requirements.txt
 
-    - name: Run Python scripts
-      run: |
-        python app.py || true
-        python dashboard.py || true
-        python analysis.py || true
+      - name: Run Python scripts
+        run: |
+          python app.py || true
+          python dashboard.py || true
+          python analysis.py || true
 
-    - name: Execute and convert notebook
-      run: |
-        conda install -y nbconvert ipykernel
-        jupyter nbconvert --to notebook --execute script2.ipynb --output executed.ipynb
-        jupyter nbconvert --to html executed.ipynb --output notebook_output.html
+      - name: Execute Jupyter notebook
+        run: |
+          conda install -y nbconvert ipykernel
+          jupyter nbconvert --to notebook --execute script2.ipynb --output executed.ipynb
+          jupyter nbconvert --to html executed.ipynb --output notebook_output.html
 
-    - name: Optional: Run tests with pytest
-      run: |
-        conda install -y pytest
-        pytest || true
+      - name: Run pytest (optional)
+        run: |
+          conda install -y pytest
+          pytest || true
