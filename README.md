@@ -40,7 +40,7 @@ streamlit run dashboard.py
 ```
 
 
-## Dashboard Code Explanation (`dashboard.py`) 🖥️📊
+## Dashboard Code Explanation (`dashboard.py`) 
 
 The `dashboard.py` script powers the DIAFOOT Analysis Dashboard, providing a user-friendly interface for uploading and analyzing clinical data. Below is a breakdown of its functionality:
 
@@ -68,9 +68,9 @@ The sidebar offers six analysis types:
 
 ### Visualizations 
 
-- **Heatmaps 🌈**: Display correlation matrices and cluster-grade contingencies.
-- **Scatter Plots ✨**: Show PCA-transformed data for clustering visualization.
-- **Bar Plots 📊**: Illustrate feature importance (regression coefficients) and correlations with specific variables.
+- **Heatmaps **: Display correlation matrices and cluster-grade contingencies.
+- **Scatter Plots **: Show PCA-transformed data for clustering visualization.
+- **Bar Plots **: Illustrate feature importance (regression coefficients) and correlations with specific variables.
 
 ### Key Features ⭐
 
@@ -79,7 +79,7 @@ The sidebar offers six analysis types:
 - **Explanations**: Expander sections provide insights into metrics (e.g., silhouette score, ARI) and chart interpretations.
 
 
-## Research Insights 🩺🔍
+## Research Insights 
 
 Our clinical observations highlight: 
 
@@ -89,5 +89,3 @@ Our clinical observations highlight:
 - **Gait Analysis 🚶‍♂️📏**: Measures maximum pressure and pressure distribution to identify at-risk areas (e.g., first metatarsal head, sesamoids, fifth metatarsal).
 
 
-
-the website for analysis : [Diafoot Analysis](https://diafoot-analysis.streamlit.app/)
