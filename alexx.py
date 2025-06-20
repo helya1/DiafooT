@@ -17,7 +17,7 @@ if uploaded_file:
     st.subheader("✅ Données brutes (aperçu)")
     st.write(df.head(21))
 
-    # ---- Index pour les pieds droit et gauche ----
+    # Index mapping pour les pieds droit et gauche
     index_map = {
         'tone_right':      [i-1 for i in [3,4,5,23,24,25,43,44,45,63,64,65,83,84,85,103,104,105,123,124,125,143,144,145,163,164,165]],
         'stiffness_right': [i-1 for i in [6,7,8,26,27,28,46,47,48,66,67,68,86,87,88,106,107,108,126,127,128,146,147,148,166,167,168]],
@@ -32,6 +32,14 @@ if uploaded_file:
 
     def extract_param(index_list):
         return df.iloc[index_list].reset_index(drop=True).T
+
+    def mean_std_ci(data):
+        # محاسبه میانگین، انحراف معیار و 95% CI
+        n = data.count()
+        mean = data.mean()
+        std = data.std()
+        ci95 = 1.96 * std / np.sqrt(n) if n > 1 else np.nan
+        return mean, std, ci95
 
     def test_normality_and_plot(param_df, title):
         st.markdown(f"### 📈 {title}")
@@ -68,16 +76,27 @@ if uploaded_file:
             p_values.append(p)
             cleaned_cols.append(col)
 
-        st.write("📌 Moyennes :")
-        results_df = pd.DataFrame({
-            'Zone': cleaned_cols,
-            'Droit': [pd.to_numeric(df1[col], errors='coerce').dropna().mean() for col in cleaned_cols],
-            'Gauche': [pd.to_numeric(df2[col], errors='coerce').dropna().mean() for col in cleaned_cols],
-            'p-valeur': p_values
-        })
-        st.write(results_df)
+        # Calcul des stats descriptives + CI
+        stats_list = []
+        for col in cleaned_cols:
+            right = pd.to_numeric(df1[col], errors='coerce').dropna()
+            left = pd.to_numeric(df2[col], errors='coerce').dropna()
+            mean_r, std_r, ci_r = mean_std_ci(right)
+            mean_l, std_l, ci_l = mean_std_ci(left)
+            stats_list.append({
+                'Zone': col,
+                'Droit (mean ± std)': f"{mean_r:.2f} ± {std_r:.2f}",
+                'Droit 95% CI': f"± {ci_r:.2f}" if not np.isnan(ci_r) else 'NA',
+                'Gauche (mean ± std)': f"{mean_l:.2f} ± {std_l:.2f}",
+                'Gauche 95% CI': f"± {ci_l:.2f}" if not np.isnan(ci_l) else 'NA',
+                'p-valeur': p_values[cleaned_cols.index(col)],
+                'Significatif': '✅' if p_values[cleaned_cols.index(col)] < 0.05 else ''
+            })
 
-        # Boxplot
+        stats_df = pd.DataFrame(stats_list)
+        st.write(stats_df)
+
+        # Boxplot avec zones significatives en rouge
         fig, ax = plt.subplots(figsize=(10, 5))
         df_box = pd.concat([
             pd.DataFrame({'Valeur': pd.to_numeric(df1[col], errors='coerce'), 'Groupe': 'Droit', 'Zone': col}) for col in cleaned_cols
@@ -85,25 +104,53 @@ if uploaded_file:
             pd.DataFrame({'Valeur': pd.to_numeric(df2[col], errors='coerce'), 'Groupe': 'Gauche', 'Zone': col}) for col in cleaned_cols
         ])
         df_box = df_box.dropna()
-        sns.boxplot(x="Zone", y="Valeur", hue="Groupe", data=df_box, ax=ax)
+
+        # Highlight zones significatives
+        palette = ['red' if p_values[i] < 0.05 else 'gray' for i in range(len(p_values))]
+
+        sns.boxplot(x="Zone", y="Valeur", hue="Groupe", data=df_box, ax=ax, palette=["#1f77b4", "#ff7f0e"])
+        for tick, color in zip(ax.get_xticklabels(), palette):
+            tick.set_color(color)
+
         ax.set_title(title)
         st.pyplot(fig)
 
-    def correlation_thickness(param_df, thickness):
+    def correlation_plots(param_df, thickness):
         st.markdown("### 🔗 Analyse de corrélation avec l'épaisseur")
-        for col in param_df.columns:
-            series = pd.to_numeric(param_df[col], errors='coerce')
-            valid = series.notna()
-            x = series[valid]
-            y = pd.Series(thickness)[valid]
 
-            if len(x) < 3:
-                st.warning(f"🚫 Trop peu de données numériques dans la colonne {col} pour effectuer la corrélation.")
+        numeric_df = param_df.apply(pd.to_numeric, errors='coerce')
+        thickness_series = pd.Series(thickness)
+
+        # Scatter plots avec ligne de tendance
+        for col in numeric_df.columns:
+            x = numeric_df[col]
+            y = thickness_series
+
+            valid = x.notna() & y.notna()
+            x_valid = x[valid]
+            y_valid = y[valid]
+
+            if len(x_valid) < 3:
+                st.warning(f"🚫 Trop peu de données numériques dans la colonne {col} pour la corrélation.")
                 continue
 
-            corr, p = stats.spearmanr(x, y)
+            corr, p = stats.spearmanr(x_valid, y_valid)
             st.write(f"📌 {col} - Corrélation Spearman : {corr:.2f}, p={p:.4f}")
 
+            fig, ax = plt.subplots()
+            sns.regplot(x=x_valid, y=y_valid, ax=ax, scatter_kws={'color':'blue'}, line_kws={'color':'red'})
+            ax.set_title(f"Corrélation {col} avec épaisseur (Spearman r={corr:.2f}, p={p:.4f})")
+            st.pyplot(fig)
+
+        # Heatmap de corrélation
+        combined = numeric_df.copy()
+        combined['Thickness'] = thickness_series
+        corr_matrix = combined.corr(method='spearman')
+
+        st.markdown("### 🔥 Heatmap des corrélations (Spearman)")
+        fig, ax = plt.subplots(figsize=(8,6))
+        sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0, ax=ax)
+        st.pyplot(fig)
 
     def plot_plan_theatral(param_df, title):
         st.markdown(f"### 🎭 Graphique plan théâtral - {title}")
@@ -112,8 +159,6 @@ if uploaded_file:
         
         mean = numeric_df.mean()
         std = numeric_df.std()
-        upper = mean + 1.96 * std
-        lower = mean - 1.96 * std
 
         fig, ax = plt.subplots(figsize=(10, 4))
         x = np.arange(len(mean))
@@ -125,7 +170,6 @@ if uploaded_file:
         st.pyplot(fig)
 
 
-    # --- Analyse de chaque paramètre ---
     for param in ['tone', 'stiffness', 'elasticity']:
         right_df = extract_param(index_map[f'{param}_right']).iloc[:, :7]
         left_df = extract_param(index_map[f'{param}_left']).iloc[:, :7]
@@ -133,17 +177,14 @@ if uploaded_file:
         right_df.columns = foot_zones
         left_df.columns = foot_zones
 
-        # Normalité
         test_normality_and_plot(right_df, f'{param.upper()} - Pied droit')
         test_normality_and_plot(left_df, f'{param.upper()} - Pied gauche')
 
-        # Test de Wilcoxon et graphique comparatif
         wilcoxon_test_and_plot(right_df, left_df, f'Test de Wilcoxon pour {param.upper()}')
 
-        # Graphique de dispersion
         plot_plan_theatral(right_df, f'{param.upper()} Pied droit')
         plot_plan_theatral(left_df, f'{param.upper()} Pied gauche')
 
-        # Corrélation avec l'épaisseur - ajout d'une colonne Thickness fictive
+        # Simulation d'épaisseur (dummy data)
         dummy_thickness = np.random.rand(len(right_df))
-        correlation_thickness(right_df, dummy_thickness)
+        correlation_plots(right_df, dummy_thickness)
