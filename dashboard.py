@@ -8,7 +8,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="DIAFOOT Analysis Dashboard", layout="wide")
-
 st.title("📊 DIAFOOT Analysis Dashboard")
 
 uploaded_file = st.file_uploader("Upload Excel file with 'DIAFOOT' sheet", type=["xlsx"])
@@ -17,24 +16,60 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file, sheet_name="DIAFOOT", header=None)
 
     analysis_type = st.sidebar.radio(
-        "Choose Analysis Type:",
-        ("Stat Summary Extractor", "ED Thickness & Hypodermis Ultrasound Analysis")
+        "🧪 Choose Analysis Type:",
+        ("📋 Stat Summary Extractor", "🧬 ED Thickness & Hypodermis Ultrasound Analysis")
     )
 
-    if analysis_type == "Stat Summary Extractor":
-        # Your first app's code block here, adapted to use the uploaded df variable
+    if analysis_type == "📋 Stat Summary Extractor":
         target_rows = {
             17: "Taille (m)",
             18: "Poids (kg)",
-            35: "Row 36",
-            36: "MESI Pression gros orteil G (norme 80-120 mmHg)"
+            35: "MESI PRESSION GO D",
+            36: "MESI PRESSION GO G",
+            37: "IPS GO D",
+            38: "IPS GO G",
+            94: "AMPLI MTP1 D",
+            95: "AMPLI MTP1 G",
+            96: "AMPLI TALO CRURALE D",
+            97: "AMPLI TALO CRURALE G",
+            108: "Pression MOYENNE DES MAX SESA D",
+            109: "Pression MOYENNE DES MAX HALLUX D",
+            110: "Pression MOYENNE DES MAX  TM5 D",
+            113: "Pression MOYENNE DES MAX  SESA G",
+            114: "Pression MOYENNE DES MAX  HALLUX G",
+            115: "Pression MOYENNE DES MAX  TM5 G",
+            118: "DURO SESA D",
+            119: "DURO HALLUX D",
+            120: "DURO TM5 D",
+            122: "DURO SESA G",
+            123: "DURO HALLUX G",
+            124: "DURO TM5 G",
+            142: "Épaisseur TOTALE PARTIES MOLLES  SESA D",
+            143: "Épaisseur TOTALE PARTIES MOLLES  HALLUX D",
+            144: "Épaisseur TOTALE PARTIES MOLLES  TM5 D",
+            146: "Épaisseur TOTALE PARTIES MOLLES  SESA G",
+            147: "Épaisseur TOTALE PARTIES MOLLES  HALLUX G",
+            148: "Épaisseur TOTALE PARTIES MOLLES  TM5 G",
+            150: "ROC SESA D",
+            151: "ROC HALLUX D",
+            152: "ROC TM5 D",
+            154: "ROC SESA G",
+            155: "ROC HALLUX G",
+            156: "ROC TM5 G",
+            212: "SUDOSCAN main D",
+            213: "SUDOSCAN main G",
+            214: "SUDOSCAN pied D",
+            215: "SUDOSCAN pied G",
         }
 
         summary = []
         deviation_table = {}
 
         for row_index, label in target_rows.items():
-            values = pd.to_numeric(df.iloc[row_index, 1:], errors='coerce')
+            values = pd.to_numeric(df.iloc[row_index, 1:], errors='coerce').dropna()
+            if values.empty:
+                continue  
+
             mean = values.mean()
             std_dev = values.std()
             deviation = values - mean
@@ -48,7 +83,7 @@ if uploaded_file:
             deviation_table[label] = deviation.round(2)
 
         summary_df = pd.DataFrame(summary)
-        deviation_df = pd.DataFrame(deviation_table)
+        deviation_df = pd.DataFrame(deviation_table).dropna() 
         deviation_df.index.name = "Patient Index"
 
         st.subheader("📊 Summary Table")
@@ -65,9 +100,9 @@ if uploaded_file:
         with open(output_filename, "rb") as f:
             st.download_button("📤 Download Excel File", f, file_name=output_filename)
 
-    elif analysis_type == "ED Thickness & Hypodermis Ultrasound Analysis":
 
-        # Find the risk row
+    elif analysis_type == "🧬 ED Thickness & Hypodermis Ultrasound Analysis":
+
         label_risk = "Grade de risque IWGDF"
         row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
         if row_risk.empty:
@@ -79,14 +114,14 @@ if uploaded_file:
 
         @st.cache_data
         def prepare_data(df, risk_values):
-            ed_data = df.iloc[126:134, 1:1+len(risk_values)]
+            ed_data = df.iloc[126:134, 1:1 + len(risk_values)]
             ed_data.index = [
                 "ED SESA R (mm)", "ED HALLUX R (mm)", "ED TM5 R (mm)", "ED Other R (mm)",
                 "ED SESA L (mm)", "ED HALLUX L (mm)", "ED TM5 L (mm)", "ED Other L (mm)"
             ]
             df_ed = ed_data.T.apply(pd.to_numeric, errors='coerce')
 
-            hypo_data = df.iloc[134:142, 1:1+len(risk_values)]
+            hypo_data = df.iloc[134:142, 1:1 + len(risk_values)]
             hypo_data.index = [
                 "US Hypoderme SESA R (mm)", "US Hypoderme HALLUX R (mm)",
                 "US Hypoderme TM5 R (mm)", "US Hypoderme Other R (mm)",
@@ -105,10 +140,7 @@ if uploaded_file:
         selected_group = st.radio("Choose a group for intra-group analysis:", ["A (Grades 0-1)", "B (Grades 2-3)"])
         filtered = df_combined[df_combined["Group"] == selected_group]
 
-        if selected_group == "A (Grades 0-1)":
-            g1, g2 = 0, 1
-        else:
-            g1, g2 = 2, 3
+        g1, g2 = (0, 1) if selected_group == "A (Grades 0-1)" else (2, 3)
 
         sub1 = filtered[filtered["Grade"] == g1]
         sub2 = filtered[filtered["Grade"] == g2]
