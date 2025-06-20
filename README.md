@@ -13,4 +13,6 @@ streamlit run app.py
 ```
 
 
-the website : https://diafoot-neuro.streamlit.app/
+the website (data) : https://diafoot-neuro.streamlit.app/
+
+the website for analysis : https://diafoot-analysis.streamlit.app/
