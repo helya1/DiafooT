@@ -1,12 +1,13 @@
+# --- Partie 1 : Planck-Hartmann Plot + Normalité ---
 import streamlit as st
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy import stats
 
 st.set_page_config(layout="wide")
-st.title("📊 Analyse statistique des données Myoton")
+st.title("🎭 Analyse Planck-Hartmann + Normalité des paramètres Myoton")
 
 uploaded_file = st.file_uploader("📂 Téléchargez le fichier Excel", type=["xlsx"])
 
@@ -14,35 +15,52 @@ if uploaded_file:
     sheet_name = "Manips resultats"
     df = pd.read_excel(uploaded_file, sheet_name=sheet_name, header=None)
 
-    st.subheader("✅ Données brutes (aperçu)")
-    st.write(df.head(21))
-
-    # Index mapping pour les pieds droit et gauche
+    # Définir les index des lignes pour chaque paramètre et côté
     index_map = {
         'tone_right':      [i-1 for i in [3,4,5,23,24,25,43,44,45,63,64,65,83,84,85,103,104,105,123,124,125,143,144,145,163,164,165]],
-        'stiffness_right': [i-1 for i in [6,7,8,26,27,28,46,47,48,66,67,68,86,87,88,106,107,108,126,127,128,146,147,148,166,167,168]],
-        'elasticity_right':[i-1 for i in [9,10,11,29,30,31,49,50,51,69,70,71,89,90,91,109,110,111,129,130,131,149,150,151,169,170,171]],
-        
         'tone_left':       [i-1 for i in [13,14,15,33,34,35,53,54,55,73,74,75,93,94,95,113,114,115,133,134,135,153,154,161,173,174,175]],
+        'stiffness_right': [i-1 for i in [6,7,8,26,27,28,46,47,48,66,67,68,86,87,88,106,107,108,126,127,128,146,147,148,166,167,168]],
         'stiffness_left':  [i-1 for i in [16,17,18,36,37,38,56,57,58,76,77,78,96,97,98,116,117,118,136,137,138,156,157,158,176,177,178]],
-        'elasticity_left': [i-1 for i in [19,20,21,39,40,41,59,60,61,79,80,81,99,100,101,119,120,121,139,140,141,159,160,161,179,180,181]]
+        'frequency_right': [i-1 for i in [9,10,11,29,30,31,49,50,51,69,70,71,89,90,91,109,110,111,129,130,131,149,150,151,169,170,171]],
+        'frequency_left':  [i-1 for i in [19,20,21,39,40,41,59,60,61,79,80,81,99,100,101,119,120,121,139,140,141,159,160,161,179,180,181]]
     }
 
     foot_zones = ['Hallux', '1T', '2-3T', '5T', 'Voute int', 'Voute ext', 'Talon']
 
     def extract_param(index_list):
-        return df.iloc[index_list].reset_index(drop=True).T
+        return df.iloc[index_list].reset_index(drop=True).T.iloc[:, :7]
 
-    def mean_std_ci(data):
-        # محاسبه میانگین، انحراف معیار و 95% CI
-        n = data.count()
-        mean = data.mean()
-        std = data.std()
-        ci95 = 1.96 * std / np.sqrt(n) if n > 1 else np.nan
-        return mean, std, ci95
+    def plot_planck_hartmann(right_df, left_df, param_name):
+        st.markdown(f"### 🎭 Planck-Hartmann: {param_name.upper()}")
+        right_numeric = right_df.apply(pd.to_numeric, errors='coerce')
+        left_numeric = left_df.apply(pd.to_numeric, errors='coerce')
+
+        centered_right = right_numeric - right_numeric.mean()
+        centered_left = left_numeric - left_numeric.mean()
+
+        fig, ax = plt.subplots(figsize=(14, 5))
+        x = np.arange(len(foot_zones))
+        width = 0.3
+
+        for i in range(len(centered_right)):
+            ax.plot(x - width/2, centered_right.iloc[i], marker='o', linestyle='-', color='blue', alpha=0.6)
+            ax.plot(x + width/2, centered_left.iloc[i], marker='o', linestyle='--', color='orange', alpha=0.6)
+
+        ax.axhline(0, color='red', linestyle='--')
+        ax.set_xticks(x)
+        ax.set_xticklabels(foot_zones)
+        ax.set_ylabel("Valeur centrée (diff. à la moyenne)")
+        ax.set_title(f"Paramètre: {param_name.upper()} (centré par zone)")
+        ax.legend(["Pied droit", "Pied gauche", "Moyenne globale = 0"], loc='upper right')
+        st.pyplot(fig)
+
+        # Intervalle de confiance (CI95) global pour info
+        ci_right = 1.96 * right_numeric.std().mean() / np.sqrt(len(right_numeric))
+        ci_left = 1.96 * left_numeric.std().mean() / np.sqrt(len(left_numeric))
+        st.info(f"CI 95% global estimé: Pied droit ±{ci_right:.2f}, Pied gauche ±{ci_left:.2f}")
 
     def test_normality_and_plot(param_df, title):
-        st.markdown(f"### 📈 {title}")
+        st.markdown(f"### 📈 Test de normalité - {title}")
         for col in param_df.columns:
             numeric_data = pd.to_numeric(param_df[col], errors='coerce').dropna()
             if len(numeric_data) < 3:
@@ -53,138 +71,87 @@ if uploaded_file:
             sns.histplot(numeric_data, kde=True, ax=ax, color='skyblue')
             ax.axvline(numeric_data.mean(), color='red', linestyle='--', label='Moyenne')
             ax.set_title(f"{col} - Shapiro p={p:.4f}")
+            ax.legend()
             st.pyplot(fig)
 
-    def wilcoxon_test_and_plot(df1, df2, title):
-        st.markdown(f"### 🧪 {title}")
+    # --- Exécution pour chaque paramètre ---
+    def wilcoxon_test_by_zone(df_right, df_left, param_name):
+        st.markdown(f"### 🧪 Test de Wilcoxon - {param_name.upper()}")
         p_values = []
-        cleaned_cols = []
+        results = []
 
-        for col in df1.columns:
-            series1 = pd.to_numeric(df1[col], errors='coerce')
-            series2 = pd.to_numeric(df2[col], errors='coerce')
-            valid = series1.notna() & series2.notna()
-            series1 = series1[valid]
-            series2 = series2[valid]
-
-            if len(series1) < 3:
-                st.warning(f"🚫 Trop peu de données numériques dans la colonne {col} pour effectuer le test de Wilcoxon.")
-                p_values.append(np.nan)
+        for col in df_right.columns:
+            x = pd.to_numeric(df_right[col], errors='coerce')
+            y = pd.to_numeric(df_left[col], errors='coerce')
+            valid = x.notna() & y.notna()
+            if valid.sum() < 3:
+                st.warning(f"🚫 Pas assez de données pour la zone {col}")
                 continue
-
-            stat, p = stats.wilcoxon(series1, series2)
+            stat, p = stats.wilcoxon(x[valid], y[valid])
             p_values.append(p)
-            cleaned_cols.append(col)
+            results.append({"Zone": col, "Wilcoxon p-valeur": f"{p:.4f}", "Significatif": "✅" if p < 0.05 else "❌"})
 
-        # Calcul des stats descriptives + CI
-        stats_list = []
-        for col in cleaned_cols:
-            right = pd.to_numeric(df1[col], errors='coerce').dropna()
-            left = pd.to_numeric(df2[col], errors='coerce').dropna()
-            mean_r, std_r, ci_r = mean_std_ci(right)
-            mean_l, std_l, ci_l = mean_std_ci(left)
-            stats_list.append({
-                'Zone': col,
-                'Droit (mean ± std)': f"{mean_r:.2f} ± {std_r:.2f}",
-                'Droit 95% CI': f"± {ci_r:.2f}" if not np.isnan(ci_r) else 'NA',
-                'Gauche (mean ± std)': f"{mean_l:.2f} ± {std_l:.2f}",
-                'Gauche 95% CI': f"± {ci_l:.2f}" if not np.isnan(ci_l) else 'NA',
-                'p-valeur': p_values[cleaned_cols.index(col)],
-                'Significatif': '✅' if p_values[cleaned_cols.index(col)] < 0.05 else ''
-            })
+        df_results = pd.DataFrame(results)
+        st.dataframe(df_results)
 
-        stats_df = pd.DataFrame(stats_list)
-        st.write(stats_df)
-
-        # Boxplot avec zones significatives en rouge
         fig, ax = plt.subplots(figsize=(10, 5))
         df_box = pd.concat([
-            pd.DataFrame({'Valeur': pd.to_numeric(df1[col], errors='coerce'), 'Groupe': 'Droit', 'Zone': col}) for col in cleaned_cols
+            pd.DataFrame({"Valeur": pd.to_numeric(df_right[col], errors='coerce'), "Pied": "Droit", "Zone": col}) for col in df_right.columns
         ] + [
-            pd.DataFrame({'Valeur': pd.to_numeric(df2[col], errors='coerce'), 'Groupe': 'Gauche', 'Zone': col}) for col in cleaned_cols
+            pd.DataFrame({"Valeur": pd.to_numeric(df_left[col], errors='coerce'), "Pied": "Gauche", "Zone": col}) for col in df_left.columns
         ])
-        df_box = df_box.dropna()
-
-        # Highlight zones significatives
-        palette = ['red' if p_values[i] < 0.05 else 'gray' for i in range(len(p_values))]
-
-        sns.boxplot(x="Zone", y="Valeur", hue="Groupe", data=df_box, ax=ax, palette=["#1f77b4", "#ff7f0e"])
-        for tick, color in zip(ax.get_xticklabels(), palette):
-            tick.set_color(color)
-
-        ax.set_title(title)
+        df_box = df_box.reset_index(drop=True)
+        sns.boxplot(data=df_box, x="Zone", y="Valeur", hue="Pied", ax=ax)
+        ax.set_title(f"Comparaison Wilcoxon - {param_name.upper()}")
         st.pyplot(fig)
+    for param in ['tone', 'stiffness', 'frequency']:
+        df_right = extract_param(index_map[f'{param}_right'])
+        df_left = extract_param(index_map[f'{param}_left'])
+        df_right.columns = foot_zones
+        df_left.columns = foot_zones
 
-    def correlation_plots(param_df, thickness):
-        st.markdown("### 🔗 Analyse de corrélation avec l'épaisseur")
+        plot_planck_hartmann(df_right, df_left, param)
+        test_normality_and_plot(df_right, f"{param.upper()} - Pied droit")
+        test_normality_and_plot(df_left, f"{param.upper()} - Pied gauche")
 
-        numeric_df = param_df.apply(pd.to_numeric, errors='coerce')
-        thickness_series = pd.Series(thickness)
 
-        # Scatter plots avec ligne de tendance
-        for col in numeric_df.columns:
-            x = numeric_df[col]
-            y = thickness_series
+        wilcoxon_test_by_zone(df_right, df_left, param)  # ✅ ici
 
+
+    def plot_correlations_by_zone(df_right, df_left, param_name):
+        st.markdown(f"### 🔗 Corrélations droite vs gauche - {param_name.upper()}")
+        
+        for zone in foot_zones:
+            x = pd.to_numeric(df_right[zone], errors='coerce')
+            y = pd.to_numeric(df_left[zone], errors='coerce')
             valid = x.notna() & y.notna()
             x_valid = x[valid]
             y_valid = y[valid]
 
             if len(x_valid) < 3:
-                st.warning(f"🚫 Trop peu de données numériques dans la colonne {col} pour la corrélation.")
+                st.warning(f"🚫 Pas assez de données pour la zone {zone} pour calculer la corrélation.")
                 continue
 
-            corr, p = stats.spearmanr(x_valid, y_valid)
-            st.write(f"📌 {col} - Corrélation Spearman : {corr:.2f}, p={p:.4f}")
+            # Calcul R et p
+            r, p = stats.pearsonr(x_valid, y_valid)
 
+            # Plot
             fig, ax = plt.subplots()
-            sns.regplot(x=x_valid, y=y_valid, ax=ax, scatter_kws={'color':'blue'}, line_kws={'color':'red'})
-            ax.set_title(f"Corrélation {col} avec épaisseur (Spearman r={corr:.2f}, p={p:.4f})")
+            ax.scatter(x_valid, y_valid, alpha=0.6, color='purple')
+            sns.regplot(x=x_valid, y=y_valid, ax=ax, scatter=False, color='red')
+            ax.set_xlabel(f"{zone} - Pied droit")
+            ax.set_ylabel(f"{zone} - Pied gauche")
+            ax.set_title(f"Corrélation {param_name.upper()} - Zone {zone}")
+
+            # Affichage R et p
+            ax.text(0.05, 0.95,
+                    f"R = {r:.2f}\nP = {p:.5f}",
+                    transform=ax.transAxes,
+                    fontsize=12,
+                    verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
             st.pyplot(fig)
-
-        # Heatmap de corrélation
-        combined = numeric_df.copy()
-        combined['Thickness'] = thickness_series
-        corr_matrix = combined.corr(method='spearman')
-
-        st.markdown("### 🔥 Heatmap des corrélations (Spearman)")
-        fig, ax = plt.subplots(figsize=(8,6))
-        sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0, ax=ax)
-        st.pyplot(fig)
-
-    def plot_plan_theatral(param_df, title):
-        st.markdown(f"### 🎭 Graphique plan théâtral - {title}")
-
-        numeric_df = param_df.apply(lambda col: pd.to_numeric(col, errors='coerce'))
-        
-        mean = numeric_df.mean()
-        std = numeric_df.std()
-
-        fig, ax = plt.subplots(figsize=(10, 4))
-        x = np.arange(len(mean))
-        ax.errorbar(x, mean, yerr=1.96 * std, fmt='o', capsize=5)
-        ax.axhline(mean.mean(), color='red', linestyle='--')
-        ax.set_xticks(x)
-        ax.set_xticklabels(mean.index, rotation=45)
-        ax.set_title(title)
-        st.pyplot(fig)
-
-
-    for param in ['tone', 'stiffness', 'elasticity']:
-        right_df = extract_param(index_map[f'{param}_right']).iloc[:, :7]
-        left_df = extract_param(index_map[f'{param}_left']).iloc[:, :7]
-
-        right_df.columns = foot_zones
-        left_df.columns = foot_zones
-
-        test_normality_and_plot(right_df, f'{param.upper()} - Pied droit')
-        test_normality_and_plot(left_df, f'{param.upper()} - Pied gauche')
-
-        wilcoxon_test_and_plot(right_df, left_df, f'Test de Wilcoxon pour {param.upper()}')
-
-        plot_plan_theatral(right_df, f'{param.upper()} Pied droit')
-        plot_plan_theatral(left_df, f'{param.upper()} Pied gauche')
-
-        # Simulation d'épaisseur (dummy data)
-        dummy_thickness = np.random.rand(len(right_df))
-        correlation_plots(right_df, dummy_thickness)
+            
+        plot_correlations_by_zone(df_right, df_left, param)  # ✅ ici
+        st.success("### ✅ Analyse terminée")
