@@ -28,9 +28,9 @@ if uploaded_file:
 
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
-        ("📋 Stat Summary Extractor", "🧩 KMeans Clustering Based on Selected Features",
-        "🧬 ED Thickness & Hypodermis Ultrasound Analysis", "🧩 GMM Clustering vs Grades", 
-        "🧠 Correlation Between Key Parameters", "📌 Mechanical Features Correlation Analysis")
+        ("📌 Stat Summary Extractor","📌 IWGDF Risk Grade Summary & Clustering",
+        "📌 ED Thickness & Hypodermis Ultrasound Analysis", "📌 GMM Clustering vs Grades", 
+        "📌 Correlation Between Key Parameters")
     )
 
     # ================================
@@ -68,9 +68,9 @@ if uploaded_file:
         return df_combined
 
     # ================================
-    # 📋 Stat Summary Extractor
+    # 📌 Stat Summary Extractor
     # ================================
-    if analysis_type == "📋 Stat Summary Extractor":
+    if analysis_type == "📌 Stat Summary Extractor":
         target_rows = {
             17: "Taille (m)", 18: "Poids (kg)", 35: "MESI PRESSION GO D", 36: "MESI PRESSION GO G",
             37: "IPS GO D", 38: "IPS GO G", 94: "AMPLI MTP1 D", 95: "AMPLI MTP1 G",
@@ -118,12 +118,99 @@ if uploaded_file:
 
         with open(output_filename, "rb") as f:
             st.download_button("📤 Download Excel File", f, file_name=output_filename)
+            
+    # ================================
+    # 📌 IWGDF Risk Grade Summary & KMeans Clustering
+    # ================================
+    elif analysis_type == "📌 IWGDF Risk Grade Summary & Clustering":
+
+        import pandas as pd
+        import matplotlib.pyplot as plt
+        from sklearn.cluster import KMeans
+        import streamlit as st
+
+        # Locate IWGDF risk grade row
+        label_risk = "Grade de risque IWGDF"
+        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
+        
+        if row_risk.empty:
+            st.error(f"Label '{label_risk}' not found in the Excel sheet.")
+            st.stop()
+
+        idx_risk = row_risk.index[0]
+        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
+        patient_ids = pd.Series(range(1, len(risk_values) + 1), index=risk_values.index)
+
+        # Basic statistics
+        min_iwgdf = risk_values.min()
+        max_iwgdf = risk_values.max()
+        mean_iwgdf = risk_values.mean()
+
+        low_moderate_patients = risk_values[risk_values.isin([0, 1])].index + 1
+        high_very_high_patients = risk_values[risk_values.isin([2, 3])].index + 1
+
+        st.subheader("📈 IWGDF Risk Grade Summary")
+        st.markdown(f"""
+        - **Grade range**: {min_iwgdf} (low) to {max_iwgdf} (very high)
+        - **Average grade**: ~{mean_iwgdf:.1f}
+        - **Low/Moderate Risk (0–1)**: Patients {', '.join(map(str, low_moderate_patients.tolist()))}
+        - **High/Very High Risk (2–3)**: Patients {', '.join(map(str, high_very_high_patients.tolist()))}
+        """)
+
+        # Frequency table
+        freq = pd.Series([0, 1, 2, 3]).apply(lambda x: (risk_values == x).sum())
+        freq.index = [0, 1, 2, 3]
+        risk_labels = {0: "Low risk", 1: "Moderate risk", 2: "High risk", 3: "Very high risk"}
+
+        st.markdown("### 📊 Frequency of Each IWGDF Risk Grade")
+        freq_df = pd.DataFrame({
+            "Grade": freq.index,
+            "Label": [risk_labels[g] for g in freq.index],
+            "Count": freq.values
+        })
+        st.dataframe(freq_df)
+
+        # Clustering
+        X = risk_values.values.reshape(-1, 1)
+        kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+        clusters = kmeans.fit_predict(X)
+
+        results = pd.DataFrame({
+            "Patient": patient_ids.values,
+            "IWGDF_Grade": risk_values.values,
+            "Cluster": clusters
+        })
+
+        # Plot clustering result
+        fig, ax = plt.subplots(figsize=(8, 4))
+        scatter = ax.scatter(results["Patient"], results["IWGDF_Grade"], c=results["Cluster"], cmap="viridis", s=100)
+        ax.set_xlabel("Patient")
+        ax.set_ylabel("IWGDF Grade")
+        ax.set_title("Clustering Patients Based on IWGDF Grade")
+        ax.set_xticks(results["Patient"])
+        ax.set_yticks([0, 1, 2, 3])
+        ax.grid(True)
+        st.pyplot(fig)
+
+        # Cluster summary
+        st.markdown("### 🧾 Cluster Composition")
+        cluster_summary = results.groupby("Cluster")["IWGDF_Grade"].agg(["count", "mean", "min", "max"])
+        st.dataframe(cluster_summary)
+
+        # Optional download
+        output_file = "IWGDF_clustering_results.xlsx"
+        with pd.ExcelWriter(output_file) as writer:
+            results.to_excel(writer, sheet_name="Clustering", index=False)
+            freq_df.to_excel(writer, sheet_name="Frequencies", index=False)
+
+        with open(output_file, "rb") as f:
+            st.download_button("📤 Download Clustering Results", f, file_name=output_file)
 
     # ================================
-    # 🧩 KMeans Clustering  *
+    # 📌 KMeans Clustering  *
     # Top 6 features most correlated with Grade
     # ================================
-    elif analysis_type == "🧩 KMeans Clustering Based on Selected Features":
+    elif analysis_type == "📌 KMeans Clustering Based on Selected Features":
         label_risk = "Grade de risque IWGDF"
         row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
         if row_risk.empty:
@@ -239,9 +326,9 @@ if uploaded_file:
             """)
 
     # ================================
-    # 🧬 ED Thickness & Hypodermis Analysis
+    # 📌 ED Thickness & Hypodermis Analysis
     # ================================
-    elif analysis_type == "🧬 ED Thickness & Hypodermis Ultrasound Analysis":
+    elif analysis_type == "📌 ED Thickness & Hypodermis Ultrasound Analysis":
         df_combined = prepare_data(df)
 
         selected_group = st.radio("Choose a group for intra-group analysis:", ["A (Grades 0-1)", "B (Grades 2-3)"])
@@ -308,14 +395,17 @@ if uploaded_file:
 
 
     # ================================
-    # 🧩 GMM Clustering vs Grades
+    # 📌 GMM Clustering vs Grades
     # Top 6 features most correlated with Grade
     # ================================
-    elif analysis_type == "🧩 GMM Clustering vs Grades":
-
+    elif analysis_type == "📌 GMM Clustering vs Grades":
         st.subheader("🔍 GMM Clustering Based on Features Correlated with Grade")
 
-        # 🔹 Locate risk grades row
+        from sklearn.mixture import GaussianMixture
+        from sklearn.metrics import adjusted_rand_score
+        from sklearn.decomposition import PCA
+
+        # 🔹 Step 1: Locate risk grades row
         label_risk = "Grade de risque IWGDF"
         row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
         if row_risk.empty:
@@ -324,52 +414,72 @@ if uploaded_file:
 
         idx_risk = row_risk.index[0]
         risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
+        expected_length = len(risk_values)
 
-        # 🔹 Extract ED & Hypodermis data
-        ed_data = df.iloc[126:134, 1:1 + len(risk_values)]
-        ed_data.index = [
-            "ED SESA R (mm)", "ED HALLUX R (mm)", "ED TM5 R (mm)", "ED Other R (mm)",
-            "ED SESA L (mm)", "ED HALLUX L (mm)", "ED TM5 L (mm)", "ED Other L (mm)"
-        ]
-        df_ed = ed_data.T.apply(pd.to_numeric, errors='coerce')
+        # 🔹 Step 2: Define data rows to extract
+        target_rows = {
+            17: "Taille (m)", 18: "Poids (kg)", 35: "MESI PRESSION GO D", 36: "MESI PRESSION GO G",
+            37: "IPS GO D", 38: "IPS GO G", 94: "AMPLI MTP1 D", 95: "AMPLI MTP1 G",
+            96: "AMPLI TALO CRURALE D", 97: "AMPLI TALO CRURALE G",
+            108: "Pression MOYENNE DES MAX SESA D", 109: "Pression MOYENNE DES MAX HALLUX D",
+            110: "Pression MOYENNE DES MAX  TM5 D", 113: "Pression MOYENNE DES MAX  SESA G",
+            114: "Pression MOYENNE DES MAX  HALLUX G", 115: "Pression MOYENNE DES MAX  TM5 G",
+            118: "DURO SESA D", 119: "DURO HALLUX D", 120: "DURO TM5 D", 122: "DURO SESA G",
+            123: "DURO HALLUX G", 124: "DURO TM5 G", 142: "Épaisseur TOTALE PARTIES MOLLES  SESA D",
+            143: "Épaisseur TOTALE PARTIES MOLLES  HALLUX D", 144: "Épaisseur TOTALE PARTIES MOLLES  TM5 D",
+            146: "Épaisseur TOTALE PARTIES MOLLES  SESA G", 147: "Épaisseur TOTALE PARTIES MOLLES  HALLUX G",
+            148: "Épaisseur TOTALE PARTIES MOLLES  TM5 G", 150: "ROC SESA D", 151: "ROC HALLUX D",
+            152: "ROC TM5 D", 154: "ROC SESA G", 155: "ROC HALLUX G", 156: "ROC TM5 G",
+            212: "SUDOSCAN main D", 213: "SUDOSCAN main G", 214: "SUDOSCAN pied D", 215: "SUDOSCAN pied G"
+        }
 
-        hypo_data = df.iloc[134:142, 1:1 + len(risk_values)]
-        hypo_data.index = [
-            "US Hypoderme SESA R (mm)", "US Hypoderme HALLUX R (mm)",
-            "US Hypoderme TM5 R (mm)", "US Hypoderme Other R (mm)",
-            "US Hypoderme SESA L (mm)", "US Hypoderme HALLUX L (mm)",
-            "US Hypoderme TM5 L (mm)", "US Hypoderme Other L (mm)"
-        ]
-        df_hypo = hypo_data.T.apply(pd.to_numeric, errors='coerce')
+        # 🔹 Step 3: Extract and validate features
+        feature_dict = {}
+        invalid_rows = []
 
-        # 🔹 Combine
-        df_combined = pd.concat([df_ed, df_hypo], axis=1).dropna()
-        df_combined["Grade"] = risk_values.loc[df_combined.index].values
-        df_combined["Group"] = df_combined["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
+        for idx, name in target_rows.items():
+            try:
+                values = pd.to_numeric(df.iloc[idx, 1:], errors='coerce')
+                if len(values.dropna()) == expected_length:
+                    feature_dict[name] = values.values[:expected_length]
+                else:
+                    invalid_rows.append((idx, name, f"Expected {expected_length}, got {len(values.dropna())}"))
+            except Exception as e:
+                invalid_rows.append((idx, name, str(e)))
 
-        # 🔹 Compute correlations with Grade
-        corr_with_grade = df_combined.drop(columns=["Group"]).corr()["Grade"].drop("Grade")
+        if not feature_dict:
+            st.error("❌ No valid features extracted. Check the data format.")
+            st.write("🛠️ Debug Info - Invalid/Mismatched rows:")
+            st.write(invalid_rows)
+            st.stop()
+
+        df_features = pd.DataFrame(feature_dict)
+        df_features = df_features.iloc[:expected_length].dropna()
+        df_features["Grade"] = risk_values.values[:len(df_features)]
+        df_features["Group"] = df_features["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
+
+        # 🔹 Step 4: Correlation with Grade
+        corr_with_grade = df_features.drop(columns=["Group"]).corr()["Grade"].drop("Grade")
         top_features = corr_with_grade.abs().sort_values(ascending=False).head(6).index.tolist()
+
+        if not top_features:
+            st.error("❌ No top features correlated with grade.")
+            st.stop()
+
         st.write("📌 Using top features:", ", ".join(top_features))
 
-        # 🔹 Clustering
-        X = df_combined[top_features]
-        y_true = df_combined["Grade"]
-
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.mixture import GaussianMixture
-        from sklearn.metrics import adjusted_rand_score
-        from sklearn.decomposition import PCA
-
+        # 🔹 Step 5: GMM Clustering
+        X = df_features[top_features]
+        y_true = df_features["Grade"]
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
         gmm = GaussianMixture(n_components=4, random_state=42)
         clusters = gmm.fit_predict(X_scaled)
-        df_combined["GMM_Cluster"] = clusters
+        df_features["GMM_Cluster"] = clusters
 
-        # 🔹 Evaluation Table
-        cluster_vs_grade = pd.crosstab(df_combined["Grade"], df_combined["GMM_Cluster"])
+        # 🔹 Step 6: Contingency Table & Heatmap
+        cluster_vs_grade = pd.crosstab(df_features["Grade"], df_features["GMM_Cluster"])
         st.write("### 🔁 Cluster vs True Grade (Contingency Table)")
         st.dataframe(cluster_vs_grade)
 
@@ -380,11 +490,11 @@ if uploaded_file:
         ax.set_ylabel("True Grade")
         st.pyplot(fig_heatmap)
 
-        # 🔹 ARI
+        # 🔹 Step 7: Adjusted Rand Index (ARI)
         ari = adjusted_rand_score(y_true, clusters)
         st.metric("🧮 Adjusted Rand Index (ARI)", f"{ari:.3f}")
 
-        # 🔹 PCA Visualization
+        # 🔹 Step 8: PCA Visualization
         X_pca = PCA(n_components=2).fit_transform(X_scaled)
         pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
         pca_df["GMM_Cluster"] = clusters
@@ -394,12 +504,11 @@ if uploaded_file:
         sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue="GMM_Cluster", style="True Grade", palette="deep", ax=ax_pca)
         ax_pca.set_title("PCA View: GMM Clusters vs True Grades")
         st.pyplot(fig_pca)
-
     
     # ================================
-    # 🧠 Correlation Between Key Parameters
+    # 📌 Correlation Between Key Parameters
     # ================================
-    elif analysis_type == "🧠 Correlation Between Key Parameters":
+    elif analysis_type == "📌 Correlation Between Key Parameters":
         st.subheader("🔗 Correlation Between Selected DIAFOOT Parameters")
 
         target_rows = {
@@ -518,6 +627,7 @@ if uploaded_file:
                 st.success("Aucune paire avec corrélation élevée selon le seuil défini.")
 
             st.markdown("💡 *Vous pouvez envisager de supprimer l'une des variables de chaque paire très corrélée pour réduire la redondance.*")
+
 
 # ================================
 # 📎 File Not Uploaded Message
