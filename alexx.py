@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from scipy.stats import shapiro, probplot, ttest_rel, wilcoxon, friedmanchisquare # Added friedmanchisquare
+from scipy.stats import shapiro, probplot, ttest_rel, wilcoxon, friedmanchisquare 
 import matplotlib.pyplot as plt
 import io
-from statsmodels.formula.api import ols # Not directly used in the provided snippets but often useful with AnovaRM
-from statsmodels.stats.anova import AnovaRM # Added AnovaRM
-
+from statsmodels.formula.api import ols 
+from statsmodels.stats.anova import AnovaRM
+import seaborn as sns
 
 st.set_page_config(layout="wide")
 st.title("📋 Analyse Myoton")
@@ -90,9 +90,7 @@ if uploaded_file:
             st.markdown("- ✅ **CV < 10%** : faible variabilité, la moyenne est représentative")
             st.markdown("- ⚠️ **CV entre 10% et 20%** : variabilité modérée, interprétation avec prudence")
             st.markdown("- ❌ **CV > 20%** : forte variabilité, la moyenne est peu fiable")
-
-
-    # --- Partie 2 : Test de normalité de Shapiro-Wilk ---       
+ 
     elif page == "Test de normalité":
         st.header("🧪 Normalité par zone, paramètre et côté :(Shapiro-Wilk)")
 
@@ -130,12 +128,10 @@ if uploaded_file:
                 vals_right = pd.to_numeric(data_right.iloc[:, i], errors='coerce').dropna()
                 vals_left = pd.to_numeric(data_left.iloc[:, i], errors='coerce').dropna()
 
-                # Indices communs pour test apparié
                 common_idx = vals_right.index.intersection(vals_left.index)
                 vals_right = vals_right.loc[common_idx]
                 vals_left = vals_left.loc[common_idx]
 
-                # Test normalité
                 norm_right = len(vals_right) >= 3 and shapiro(vals_right).pvalue > 0.05
                 norm_left = len(vals_left) >= 3 and shapiro(vals_left).pvalue > 0.05
 
@@ -162,14 +158,11 @@ if uploaded_file:
             st.write(f"📋 Résultats des tests entre pied droit et gauche pour : {param_name}")
             st.dataframe(df_results)
 
-
-        # Affichage normalité simple
         for label, key in parameters:
             st.markdown(f"### 🔍 {label}")
             data = extract_param(index_map[key])
             test_normality_only(data, label, foot_zones)
 
-        # Test de comparaison symétrie avec test t ou Wilcoxon selon normalité
         for param_name, key_right, key_left in [
             ("Tone", "tone_right", "tone_left"),
             ("Stiffness", "stiffness_right", "stiffness_left"),
@@ -207,7 +200,6 @@ if uploaded_file:
                 vals_right = pd.to_numeric(data_right.iloc[:, i], errors='coerce').dropna()
                 vals_left = pd.to_numeric(data_left.iloc[:, i], errors='coerce').dropna()
 
-                # Q-Q Plots
                 fig, axs = plt.subplots(1, 2, figsize=(12, 5))
                 fig.suptitle(f"{param_name} – Zone : {zone}", fontsize=16)
 
@@ -249,30 +241,25 @@ if uploaded_file:
             right_numeric = right_df.apply(pd.to_numeric, errors='coerce')
             left_numeric = left_df.apply(pd.to_numeric, errors='coerce')
 
-            # Centrer les données par zone (différence à la moyenne par zone)
             centered_right = right_numeric - right_numeric.mean()
             centered_left = left_numeric - left_numeric.mean()
 
-            # Calcul moyenne générale (droite + gauche)
             mean_global = pd.concat([right_numeric, left_numeric]).mean()
 
             fig, ax = plt.subplots(figsize=(14, 6))
             x = np.arange(len(foot_zones))
             width = 0.3
 
-            # Tracer chaque individu (droite)
             for i in range(len(centered_right)):
                 ax.plot(x - width/2, centered_right.iloc[i], marker='o', linestyle='-', color='blue', alpha=0.6, label="Individu Pied Droit" if i == 0 else "")
 
-            # Tracer chaque individu (gauche)
             for i in range(len(centered_left)):
                 ax.plot(x + width/2, centered_left.iloc[i], marker='o', linestyle='--', color='orange', alpha=0.6, label="Individu Pied Gauche" if i == 0 else "")
 
-            # Tracer la moyenne générale (droite + gauche) centrée (ligne épaisse et couleur distincte)
+
             mean_centered = mean_global - mean_global.mean()
             ax.plot(x, mean_centered, marker='s', linestyle='-', color='green', linewidth=3, label="Moyenne Générale", alpha=0.8)
 
-            # Ligne horizontale 0
             ax.axhline(0, color='red', linestyle='--', label="Moyenne zone = 0")
 
             ax.set_xticks(x)
@@ -281,8 +268,7 @@ if uploaded_file:
             ax.set_title(f"Paramètre : {param_name.upper()} (centré par zone)")
             ax.legend(loc='upper right')
             ax.grid(True)
-            
-            # --- Partie téléchargement ---
+  
             buf = io.BytesIO()
             fig.savefig(buf, format="png")
             buf.seek(0)
@@ -294,17 +280,13 @@ if uploaded_file:
             )
 
             st.pyplot(fig)
-
-            # Calcul IC 95% global par côté (moyenne des std divisée par racine n)
             ci_right = 1.96 * right_numeric.std().mean() / np.sqrt(len(right_numeric))
             ci_left = 1.96 * left_numeric.std().mean() / np.sqrt(len(left_numeric))
             st.info(f"Intervalle de confiance 95% estimé : Pied droit ±{ci_right:.2f}, Pied gauche ±{ci_left:.2f}")
 
-        # --- Simulation données (à remplacer par tes extractions réelles) ---
         np.random.seed(42)
         n_subjects = 15
 
-        # Générer données factices pour chaque paramètre, 15 sujets, 7 zones
         df_tone_right = pd.DataFrame(np.random.normal(50, 10, (n_subjects, 7)), columns=foot_zones)
         df_tone_left = pd.DataFrame(np.random.normal(48, 9, (n_subjects, 7)), columns=foot_zones)
 
@@ -314,7 +296,7 @@ if uploaded_file:
         df_frequency_right = pd.DataFrame(np.random.normal(20, 3, (n_subjects, 7)), columns=foot_zones)
         df_frequency_left = pd.DataFrame(np.random.normal(18, 3, (n_subjects, 7)), columns=foot_zones)
 
-        # Affichage
+
         st.header("🎭 Planck-Hartmann - Comparaison Pied Droit / Pied Gauche")
 
         plot_planck_hartmann(df_tone_right, df_tone_left, "Tone")
@@ -322,8 +304,6 @@ if uploaded_file:
         plot_planck_hartmann(df_frequency_right, df_frequency_left, "Frequency")
         
 
-        
-        # --- Interprétation du Plot Planck-Hartmann ---
         st.markdown("### 🧠 Interprétation des graphiques Planck-Hartmann")
         st.markdown("""
         - **Les courbes bleues** représentent les valeurs centrées pour chaque individu au pied droit,  
@@ -358,31 +338,24 @@ if uploaded_file:
             right_numeric = right_df.apply(pd.to_numeric, errors='coerce')
             left_numeric = left_df.apply(pd.to_numeric, errors='coerce')
 
-            # Moyenne des répétitions par zone (axe=0 = colonne)
             mean_right = right_numeric.mean(axis=0)
             mean_left = left_numeric.mean(axis=0)
 
-            # Centrer chaque répétition par rapport à sa moyenne zone
             centered_right = right_numeric.subtract(mean_right, axis=1)
             centered_left = left_numeric.subtract(mean_left, axis=1)
 
-            # Moyenne globale (droite + gauche)
             mean_global = pd.concat([right_numeric, left_numeric]).mean(axis=0)
             mean_global_centered = mean_global - mean_global.mean()
 
             fig, ax = plt.subplots(figsize=(14, 6))
             x = np.arange(len(foot_zones))
             width = 0.3
-
-            # Tracer répétitions pied droit
             for i in range(len(centered_right)):
                 ax.plot(x - width/2, centered_right.iloc[i], marker='o', linestyle='-', color='blue', alpha=0.6, label="Répétition Pied Droit" if i == 0 else "")
 
-            # Tracer répétitions pied gauche
             for i in range(len(centered_left)):
                 ax.plot(x + width/2, centered_left.iloc[i], marker='o', linestyle='--', color='orange', alpha=0.6, label="Répétition Pied Gauche" if i == 0 else "")
 
-            # Tracer moyenne globale
             ax.plot(x, mean_global_centered, marker='s', linestyle='-', color='green', linewidth=3, label="Moyenne Générale", alpha=0.8)
 
             ax.axhline(0, color='red', linestyle='--', label="Moyenne zone = 0")
@@ -393,7 +366,6 @@ if uploaded_file:
             ax.legend(loc='upper right')
             ax.grid(True)
             
-            # --- Partie téléchargement ---
             buf = io.BytesIO()
             fig.savefig(buf, format="png")
             buf.seek(0)
@@ -410,7 +382,6 @@ if uploaded_file:
             ci_left = 1.96 * left_numeric.std().mean() / np.sqrt(len(left_numeric))
             st.info(f"Intervalle de confiance 95% estimé : Pied droit ±{ci_right:.2f}, Pied gauche ±{ci_left:.2f}")
 
-        # Liste des paramètres à analyser et afficher
         parameters = [
             ("Tone", "tone_right", "tone_left"),
             ("Stiffness", "stiffness_right", "stiffness_left"),
@@ -435,16 +406,13 @@ if uploaded_file:
                 vals_right = pd.to_numeric(data_right.iloc[:, i], errors='coerce').dropna()
                 vals_left = pd.to_numeric(data_left.iloc[:, i], errors='coerce').dropna()
 
-                # Indices communs pour test apparié
                 common_idx = vals_right.index.intersection(vals_left.index)
                 vals_right = vals_right.loc[common_idx]
                 vals_left = vals_left.loc[common_idx]
 
-                # Vérification normalité avec Shapiro-Wilk (min 3 données)
                 norm_right = len(vals_right) >= 3 and shapiro(vals_right).pvalue > 0.05
                 norm_left = len(vals_left) >= 3 and shapiro(vals_left).pvalue > 0.05
 
-                # Choix du test selon normalité
                 if norm_right and norm_left:
                     stat, p_value = ttest_rel(vals_right, vals_left)
                     test_used = "Test t apparié (paramétrique)"
@@ -456,7 +424,7 @@ if uploaded_file:
                         stat, p_value = np.nan, np.nan
                         test_used = "Test de Wilcoxon (impossible)"
 
-                # Interprétation du résultat
+    
                 if pd.isna(p_value):
                     conclusion = "⚠️ Données insuffisantes"
                 elif p_value < 0.05:
@@ -478,7 +446,7 @@ if uploaded_file:
 
         page = st.sidebar.radio("Choisir la page :", ["Test de symétrie Gauche/Droite", "Autres pages..."])
 
-        if uploaded_file:  # Ton code d'import des données
+        if uploaded_file: 
 
             if page == "Test de symétrie Gauche/Droite":
                 st.header("⚖️ Test de symétrie Gauche vs Droit (t-test ou Wilcoxon selon normalité)")
@@ -518,7 +486,6 @@ if uploaded_file:
                 st.warning(f"Pas assez de données complètes pour analyser {param_name}.")
                 return
 
-            # Test normalité par zone
             normalities = []
             for col in data_num.columns:
                 vals = data_num[col].dropna()
@@ -535,7 +502,6 @@ if uploaded_file:
             })
             st.dataframe(norm_df)
 
-            # Préparation données pour tests et graphique
             df_long = data_num.reset_index().melt(id_vars='index', value_vars=data_num.columns,
                                                 var_name='Zone', value_name='Valeur')
             df_long = df_long.rename(columns={'index': 'Sujet'})
@@ -574,8 +540,6 @@ if uploaded_file:
             # --- Graphique Boxplot ---
             st.markdown("### 📊 Visualisation : Distribution par zone")
             fig, ax = plt.subplots(figsize=(8, 5))
-            # Utiliser seaborn pour une gestion plus simple des couleurs
-            import seaborn as sns
             sns.boxplot(data=df_long, x="Zone", y="Valeur", ax=ax, palette="pastel")
             plt.title(f"Distribution par zone – {param_name}")
             plt.xlabel("Zone")
@@ -583,7 +547,6 @@ if uploaded_file:
             plt.grid(True)
             st.pyplot(fig)
 
-            # Sauvegarde dans un buffer pour téléchargement
             buffer = io.BytesIO()
             fig.savefig(buffer, format="png")
             buffer.seek(0)
@@ -596,7 +559,62 @@ if uploaded_file:
             plt.close(fig)
 
 
-        # Boucle sur paramètres pied droit / gauche
+
+        def plot_side_by_side(param_name, key_right, key_left, foot_zones):
+            data_right = extract_param(index_map[key_right])
+            data_left = extract_param(index_map[key_left])
+
+            data_right_num = data_right.apply(pd.to_numeric, errors='coerce')
+            data_left_num = data_left.apply(pd.to_numeric, errors='coerce')
+
+            valid_right = data_right_num.dropna()
+            valid_left = data_left_num.dropna()
+
+            if valid_right.empty and valid_left.empty:
+                st.warning(f"Pas assez de données complètes pour {param_name} sur les deux pieds.")
+                return
+
+            long_right = valid_right.reset_index().melt(id_vars='index', value_vars=valid_right.columns,
+                                                        var_name='Zone', value_name='Valeur')
+            long_left = valid_left.reset_index().melt(id_vars='index', value_vars=valid_left.columns,
+                                                    var_name='Zone', value_name='Valeur')
+
+
+            fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
+
+            sns.boxplot(data=long_right, x='Zone', y='Valeur', ax=axes[0], color='skyblue')
+            axes[0].set_title(f"Pied Droit - {param_name}")
+            axes[0].set_xlabel("Zone du pied")
+            axes[0].set_ylabel("Valeur")
+            axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+
+            sns.boxplot(data=long_left, x='Zone', y='Valeur', ax=axes[1], color='salmon')
+            axes[1].set_title(f"Pied Gauche - {param_name}")
+            axes[1].set_xlabel("Zone du pied")
+            axes[1].set_ylabel("")  # Pas de label Y à droite
+            axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+            plt.suptitle(f"Distribution par zone pour {param_name} - Pied Droit vs Gauche")
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+
+            st.pyplot(fig)
+
+            # Téléchargement
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png')
+            buf.seek(0)
+            st.download_button(
+                label=f"📥 Télécharger le graphique {param_name}",
+                data=buf,
+                file_name=f"{param_name.replace(' ', '_')}_right_left_boxplots.png",
+                mime="image/png"
+            )
+            plt.close(fig)
+
+        for param_name, key_right, key_left in parameters_comparison_keys:
+            st.markdown(f"## Analyse pour {param_name}")
+            plot_side_by_side(param_name, key_right, key_left, foot_zones)
+        
         for param_name, key_right, key_left in parameters_comparison_keys:
             st.markdown(f"## Analyse des zones pour {param_name}")
             st.subheader(f"Pied Droit - {param_name}")
@@ -604,7 +622,6 @@ if uploaded_file:
             st.subheader(f"Pied Gauche - {param_name}")
             test_inter_zone_summary(key_left, f"{param_name} (Gauche)", foot_zones)
 
-        # Interprétation globale
         st.markdown("---")
         st.markdown("### 🧠 Interprétation des tests statistiques inter-zones")
         st.markdown("""
