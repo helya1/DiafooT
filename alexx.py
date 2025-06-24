@@ -501,114 +501,126 @@ if uploaded_file:
                 - Test de Wilcoxon apparié sinon (non paramétrique)
                 """)
 
-
-    elif page == "Test inter-zone (paramétrique/non-paramétrique)": # Consolidated and renamed page
+    elif page == "Test inter-zone (paramétrique/non-paramétrique)":
         st.header("🧪 Comparaison inter-zones (ANOVA RM / Friedman)")
 
-        # Simplified function for the main page display
+        parameters_comparison_keys = [
+            ("Tone", "tone_right", "tone_left"),
+            ("Stiffness", "stiffness_right", "stiffness_left"),
+            ("Frequency", "frequency_right", "frequency_left")
+        ]
+
         def test_inter_zone_summary(param_key, param_name, foot_zones):
             data = extract_param(index_map[param_key])
-            # Ensure data is numeric and drop NaNs for analysis. Important for 'per subject' analysis later.
             data_num = data.apply(pd.to_numeric, errors='coerce').dropna()
 
             if data_num.empty:
                 st.warning(f"Pas assez de données complètes pour analyser {param_name}.")
                 return
 
-            # Test de normalité sur chaque zone
+            # Test normalité par zone
             normalities = []
-            for col in data_num.columns: # Iterate over the actual columns of the cleaned data_num
+            for col in data_num.columns:
                 vals = data_num[col].dropna()
-                if len(vals) >= 3:
-                    p_val = shapiro(vals).pvalue
-                else:
-                    p_val = np.nan
+                p_val = shapiro(vals).pvalue if len(vals) >= 3 else np.nan
                 normalities.append(p_val)
 
             all_normal = all([(p > 0.05) for p in normalities if not pd.isna(p)])
 
             st.write(f"### Résultats pour : {param_name}")
             norm_df = pd.DataFrame({
-                "Zone": foot_zones, # Use global foot_zones for display, assuming data_num columns map to it
+                "Zone": foot_zones,
                 "p-value normalité": [f"{p:.4f}" if not pd.isna(p) else "N/A" for p in normalities],
                 "Distribution": ["Normale" if (p > 0.05) else "Non normale" if not pd.isna(p) else "N/A" for p in normalities]
             })
             st.dataframe(norm_df)
 
-            # Prepare data for ANOVA RM or Friedman: long format for AnovaRM, list of arrays for Friedman
+            # Préparation données pour tests et graphique
             df_long = data_num.reset_index().melt(id_vars='index', value_vars=data_num.columns,
-                                                     var_name='Zone', value_name='Valeur')
+                                                var_name='Zone', value_name='Valeur')
             df_long = df_long.rename(columns={'index': 'Sujet'})
 
             if all_normal:
-                st.write("✅ Toutes les zones considérées comme normales. Effectue une ANOVA à mesures répétées.")
+                st.write("✅ Toutes les zones sont normales. ANOVA à mesures répétées en cours...")
                 try:
-                    # Ensure 'Sujet' and 'Zone' are strings as AnovaRM expects
                     df_long['Sujet'] = df_long['Sujet'].astype(str)
                     df_long['Zone'] = df_long['Zone'].astype(str)
                     aovrm = AnovaRM(df_long, 'Valeur', 'Sujet', within=['Zone'])
                     res = aovrm.fit()
-                    st.text(res.summary().as_text()) # Use as_text() for better display in Streamlit
+                    st.text(res.summary().as_text())
                     p_val = res.anova_table["Pr > F"][0]
 
                     if p_val < 0.05:
-                        st.success(f"Différence significative entre les zones (p = {p_val:.4f})")
+                        st.success(f"✅ Différence significative entre les zones (p = {p_val:.4f})")
                     else:
-                        st.info(f"Aucune différence significative détectée entre les zones (p = {p_val:.4f})")
+                        st.info(f"ℹ️ Aucune différence significative entre les zones (p = {p_val:.4f})")
                 except Exception as e:
-                    st.error(f"Erreur lors de l'ANOVA à mesures répétées : {e}")
-                    st.warning("Assurez-vous que chaque sujet a des données pour toutes les zones pour l'ANOVA RM.")
+                    st.error(f"Erreur ANOVA : {e}")
+                    return
             else:
-                st.write("❌ Au moins une zone ne suit pas une distribution normale. Effectue un test de Friedman.")
-                # Friedman takes *args, each arg is a data array for a group/zone
-                vals_for_friedman = [data_num[col].dropna().values for col in data_num.columns]
-                # Friedman requires at least 3 groups, and each group needs valid data
-                if len(vals_for_friedman) < 3 or any(len(v) == 0 for v in vals_for_friedman):
-                    st.warning("Pas assez de groupes ou de données valides par groupe pour le test de Friedman.")
-                else:
-                    try:
-                        stat, p_val = friedmanchisquare(*vals_for_friedman)
-                        st.write(f"Statistique Friedman : {stat:.4f}")
-                        if p_val < 0.05:
-                            st.success(f"Différence significative entre les zones (p = {p_val:.4f})")
-                        else:
-                            st.info(f"Aucune différence significative détectée entre les zones (p = {p_val:.4f})")
-                    except Exception as e:
-                        st.error(f"Erreur lors du test de Friedman : {e}")
-                        st.warning("Vérifiez que toutes les zones ont des observations appariées (même nombre de sujets avec des données complètes pour toutes les zones).")
+                st.write("❌ Au moins une zone n'est pas normale. Test de Friedman en cours...")
+                try:
+                    vals_for_friedman = [data_num[col].dropna().values for col in data_num.columns]
+                    stat, p_val = friedmanchisquare(*vals_for_friedman)
+                    st.write(f"Statistique Friedman : {stat:.4f}")
+                    if p_val < 0.05:
+                        st.success(f"✅ Différence significative entre les zones (p = {p_val:.4f})")
+                    else:
+                        st.info(f"ℹ️ Aucune différence significative entre les zones (p = {p_val:.4f})")
+                except Exception as e:
+                    st.error(f"Erreur Friedman : {e}")
+                    return
 
-        # Loop through parameters (Tone, Stiffness, Frequency) for both right and left feet
-        for param_name, key_right, key_left in parameters_comparison_keys: # Use comparison keys as they hold (param_name, right_key, left_key)
+            # --- Graphique Boxplot ---
+            st.markdown("### 📊 Visualisation : Distribution par zone")
+            fig, ax = plt.subplots(figsize=(8, 5))
+            # Utiliser seaborn pour une gestion plus simple des couleurs
+            import seaborn as sns
+            sns.boxplot(data=df_long, x="Zone", y="Valeur", ax=ax, palette="pastel")
+            plt.title(f"Distribution par zone – {param_name}")
+            plt.xlabel("Zone")
+            plt.ylabel("Valeur")
+            plt.grid(True)
+            st.pyplot(fig)
+
+            # Sauvegarde dans un buffer pour téléchargement
+            buffer = io.BytesIO()
+            fig.savefig(buffer, format="png")
+            buffer.seek(0)
+            st.download_button(
+                label="📥 Télécharger le graphe",
+                data=buffer,
+                file_name=f"boxplot_{param_name.replace(' ', '_')}.png",
+                mime="image/png"
+            )
+            plt.close(fig)
+
+
+        # Boucle sur paramètres pied droit / gauche
+        for param_name, key_right, key_left in parameters_comparison_keys:
             st.markdown(f"## Analyse des zones pour {param_name}")
             st.subheader(f"Pied Droit - {param_name}")
-            test_inter_zone_summary(key_right, f"{param_name} (Droit)", foot_zones) # Pass param_name with side
+            test_inter_zone_summary(key_right, f"{param_name} (Droit)", foot_zones)
             st.subheader(f"Pied Gauche - {param_name}")
-            test_inter_zone_summary(key_left, f"{param_name} (Gauche)", foot_zones) # Pass param_name with side
+            test_inter_zone_summary(key_left, f"{param_name} (Gauche)", foot_zones)
 
-            st.markdown("---")
-            st.markdown("### 🧠 Interprétation des tests statistiques inter-zones")
+        # Interprétation globale
+        st.markdown("---")
+        st.markdown("### 🧠 Interprétation des tests statistiques inter-zones")
+        st.markdown("""
+        - **Objectif :** détecter des différences significatives entre les zones du pied pour un paramètre donné.
 
-            st.markdown("""
-            - **But de ces tests** : déterminer si les différentes **zones du pied** présentent des **valeurs significativement différentes** pour un paramètre donné (tone, stiffness, frequency, etc.).
+        #### 🔬 ANOVA à mesures répétées
+        - Utilisée si **toutes les zones** ont une distribution normale.
+        - Compare les moyennes en tenant compte des sujets.
+        - **p < 0.05** : il existe au moins une différence significative.
+        - **p ≥ 0.05** : pas de différence significative.
 
-            #### 🔬 ANOVA à mesures répétées (test paramétrique)
-            - Utilisé lorsque **toutes les zones ont une distribution normale** (test de Shapiro-Wilk p > 0.05).
-            - Ce test compare les moyennes entre les zones, en tenant compte des mesures répétées sur les mêmes sujets.
-            - **Interprétation :**
-            - Si *p-value < 0.05* → **différences significatives** entre au moins deux zones.
-            - Si *p-value ≥ 0.05* → **pas de différence significative**, le paramètre est distribué de façon homogène entre les zones.
+        #### 🧪 Test de Friedman
+        - Utilisé si **au moins une zone** n'est pas normale.
+        - Comparaison non paramétrique appariée.
+        - **p < 0.05** : différences significatives détectées.
+        - **p ≥ 0.05** : homogénéité inter-zones.
 
-            #### 🧪 Test de Friedman (test non paramétrique)
-            - Utilisé quand **au moins une zone n’a pas une distribution normale**.
-            - C’est l’alternative non paramétrique à l’ANOVA pour données appariées.
-            - **Interprétation :**
-            - Si *p-value < 0.05* → **différences significatives** entre les zones.
-            - Si *p-value ≥ 0.05* → **pas de différence significative**.
-
-            👉 Ces tests permettent de détecter des **asymétries fonctionnelles ou structurelles** dans le pied.
-            """)
-
-
-
-    else:
-        st.info("Veuillez charger un fichier Excel pour commencer l'analyse.")
+        👉 Ces tests aident à mettre en évidence les **variations biomécaniques** potentielles entre les zones plantaires.
+        """)
