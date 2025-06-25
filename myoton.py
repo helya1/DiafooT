@@ -10,7 +10,7 @@ import seaborn as sns
 
 st.set_page_config(layout="wide")
 st.title("📋 Analyse Myoton")
-page = st.sidebar.radio("Choisir la page :", ["Statistiques par zone", "Test de normalité", "plot_left_right_comparison", "plot planck_hartmann", "test_symmetry_with_parametric_choice", "Test inter-zone (paramétrique/non-paramétrique)"])
+page = st.sidebar.radio("Choisir la page :", ["Statistiques par zone", "Test de normalité", "plot_left_right_comparison", "plot planck_hartmann", "test_symmetry_with_parametric_choice", "Test inter-zone (paramétrique/non-paramétrique)", "Statistiques globales par zone (droite + gauche)", "plot planck_hartmann final"])
 
 uploaded_file = st.file_uploader("📂 Charger le fichier Excel", type=["xlsx"])
 
@@ -641,3 +641,101 @@ if uploaded_file:
 
         👉 Ces tests aident à mettre en évidence les **variations biomécaniques** potentielles entre les zones plantaires.
         """)
+
+    elif page == "Statistiques globales par zone (droite + gauche)":
+        st.header("📊 Statistiques globales par zone (droite + gauche fusionnées)")
+
+        def compute_statistics_all_zones(param_right, param_left, param_label):
+            data_right = extract_param(index_map[param_right])
+            data_left = extract_param(index_map[param_left])
+
+            # Fusionner les deux (concaténer les colonnes : même zones)
+            data_combined = pd.concat([data_right, data_left], axis=0).reset_index(drop=True)
+
+            stats = []
+            for zone in foot_zones:
+                values = pd.to_numeric(data_combined[zone], errors='coerce').dropna()
+                mean = values.mean()
+                std = values.std()
+                cv = std / mean if mean != 0 else np.nan
+
+                if pd.isna(cv):
+                    interpretation = "Données insuffisantes"
+                elif cv < 0.10:
+                    interpretation = "✅ Bonne représentativité (CV < 10%)"
+                elif cv < 0.20:
+                    interpretation = "⚠️ Variabilité modérée (10% ≤ CV < 20%)"
+                else:
+                    interpretation = "❌ Forte variabilité (CV ≥ 20%)"
+
+                stats.append({
+                    "Zone": zone,
+                    "Moyenne": f"{mean:.2f}",
+                    "Écart-type": f"{std:.2f}",
+                    "CV (%)": f"{cv * 100:.2f}" if pd.notnull(cv) else "N/A",
+                    "Interprétation": interpretation
+                })
+
+            stats_df = pd.DataFrame(stats)
+            st.markdown(f"### 📌 {param_label} (fusion pied droit + gauche)")
+            st.dataframe(stats_df)
+
+        # Lancer pour chaque paramètre
+        compute_statistics_all_zones("tone_right", "tone_left", "Tone")
+        compute_statistics_all_zones("stiffness_right", "stiffness_left", "Stiffness")
+        compute_statistics_all_zones("frequency_right", "frequency_left", "Frequency")
+
+        st.markdown("ℹ️ **Interprétation des CV :**")
+        st.markdown("- ✅ **CV < 10%** : faible variabilité, la moyenne est représentative")
+        st.markdown("- ⚠️ **CV entre 10% et 20%** : variabilité modérée, interprétation avec prudence")
+        st.markdown("- ❌ **CV > 20%** : forte variabilité, la moyenne est peu fiable")
+
+
+    elif page == "plot planck_hartmann final":
+        st.header("📍 Planck-Hartmann - Points, moyenne et écart-type par zone")
+
+        parameters = [
+            ("Tone - Pied Droit",      'tone_right'),
+            ("Tone - Pied Gauche",     'tone_left'),
+            ("Stiffness - Pied Droit", 'stiffness_right'),
+            ("Stiffness - Pied Gauche",'stiffness_left'),
+            ("Frequency - Pied Droit", 'frequency_right'),
+            ("Frequency - Pied Gauche",'frequency_left')
+        ]
+
+        for param_label, param_key in parameters:
+            data = extract_param(index_map[param_key])
+
+            st.markdown(f"## ⚙️ {param_label}")
+
+            for zone in foot_zones:
+                values = pd.to_numeric(data[zone], errors='coerce').dropna()
+                if values.empty:
+                    st.write(f"Aucune donnée pour {zone}")
+                    continue
+
+                mean_val = values.mean()
+                std_val = values.std()
+                ic_low = mean_val - 2 * std_val
+                ic_high = mean_val + 2 * std_val
+
+                st.markdown(f"### {zone} — Moyenne : {mean_val:.2f}")
+                st.markdown(f"Intervalle de confiance (≈95%) : [{ic_low:.2f} ; {ic_high:.2f}]")
+
+                fig, ax = plt.subplots(figsize=(6, 3))
+                ax.scatter(range(1, len(values)+1), values, color='blue', label='Valeurs individuelles')
+
+                # Ligne moyenne
+                ax.axhline(mean_val, color='red', linestyle='-', linewidth=2, label='Moyenne')
+
+                # Lignes mean ± SD
+                ax.axhline(mean_val + std_val, color='green', linestyle='--', linewidth=1.5, label='Moyenne + SD')
+                ax.axhline(mean_val - std_val, color='green', linestyle='--', linewidth=1.5, label='Moyenne - SD')
+
+                ax.set_xticks(range(1, len(values)+1))
+                ax.set_xlabel("Index échantillon")
+                ax.set_ylabel(param_label)
+                ax.set_title(f"{zone}")
+
+
+                st.pyplot(fig)
