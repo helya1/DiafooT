@@ -10,7 +10,7 @@ import seaborn as sns
 
 st.set_page_config(layout="wide")
 st.title("📋 Analyse Myoton")
-page = st.sidebar.radio("Choisir la page :", ["Statistiques par zone", "Test de normalité", "plot_left_right_comparison", "plot planck_hartmann", "Moyenne répétitions", "test_symmetry_with_parametric_choice", "Test inter-zone (paramétrique/non-paramétrique)"])
+page = st.sidebar.radio("Choisir la page :", ["Statistiques par zone", "Test de normalité", "plot_left_right_comparison", "plot planck_hartmann", "test_symmetry_with_parametric_choice", "Test inter-zone (paramétrique/non-paramétrique)"])
 
 uploaded_file = st.file_uploader("📂 Charger le fichier Excel", type=["xlsx"])
 
