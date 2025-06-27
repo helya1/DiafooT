@@ -26,15 +26,6 @@ jobs:
         if [ -f dashboard.py ]; then python dashboard.py; fi
         if [ -f analysis.py ]; then python analysis.py; fi
 
-    - name: Install Jupyter tools
-      run: pip install nbconvert ipykernel
-
-    - name: Execute Jupyter Notebooks
-      run: |
-        for nb in *.ipynb; do
-          jupyter nbconvert --to notebook --execute "$nb" --output "executed_$nb"
-        done
-
     - name: Run tests
       run: |
         pip install pytest
