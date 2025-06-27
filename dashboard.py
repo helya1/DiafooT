@@ -9,6 +9,8 @@ from sklearn.metrics import silhouette_score, adjusted_rand_score
 from sklearn.decomposition import PCA
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.stats import ttest_rel, wilcoxon, shapiro
+import io
 from matplotlib import cm
 cm.get_cmap("coolwarm")
 
@@ -28,96 +30,428 @@ if uploaded_file:
 
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
-        ("📌 Stat Summary Extractor","📌 IWGDF Risk Grade Summary & Clustering",
-        "📌 ED Thickness & Hypodermis Ultrasound Analysis", "📌 GMM Clustering vs Grades", 
-        "📌 Correlation Between Key Parameters")
+        ("Descriptive Analysis", "Normality Tests","Comparison of Left and Right Foot Parameters", "📌 IWGDF Risk Grade Summary & Clustering",
+        "📌 ED Thickness & Hypodermis Ultrasound Analysis", "📌 GMM Clustering vs Grades")
     )
 
     # ================================
     # 🧹 Data Preparation Function
     # ================================
     def prepare_data(df):
+        # Define the risk label and get values from row 17 (which is index 16 in Python)
         label_risk = "Grade de risque IWGDF"
-        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
-        if row_risk.empty:
-            st.error(f"Label '{label_risk}' not found.")
+        row_risk = df.iloc[16]
+        
+        if str(row_risk[0]).strip().lower() != label_risk.lower():
+            st.error(f"Label '{label_risk}' not found in row 17 (index 16).")
             st.stop()
 
-        idx_risk = row_risk.index[0]
-        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
+        # Extract risk grades from the row (skip first column)
+        risk_values = pd.to_numeric(row_risk[1:], errors='coerce').dropna().astype(int)
 
-        ed_data = df.iloc[126:134, 1:1 + len(risk_values)]
-        ed_data.index = [
-            "ED SESA R (mm)", "ED HALLUX R (mm)", "ED TM5 R (mm)", "ED Other R (mm)",
-            "ED SESA L (mm)", "ED HALLUX L (mm)", "ED TM5 L (mm)", "ED Other L (mm)"
-        ]
-        df_ed = ed_data.T.apply(pd.to_numeric, errors='coerce')
+        # Define the rows to extract (biomechanical, clinical, and ultrasound parameters)
+        target_rows = {
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "ABI R", 38: "ABI L", 94: "ROM MTP1 R", 95: "ROM MTP1 L",
+            96: "ROM Ankle R", 97: "ROM Ankle L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
+        }
 
-        hypo_data = df.iloc[134:142, 1:1 + len(risk_values)]
-        hypo_data.index = [
-            "US Hypoderme SESA R (mm)", "US Hypoderme HALLUX R (mm)",
-            "US Hypoderme TM5 R (mm)", "US Hypoderme Other R (mm)",
-            "US Hypoderme SESA L (mm)", "US Hypoderme HALLUX L (mm)",
-            "US Hypoderme TM5 L (mm)", "US Hypoderme Other L (mm)"
-        ]
-        df_hypo = hypo_data.T.apply(pd.to_numeric, errors='coerce')
+        # Extract data rows and rename them
+        selected_data = df.loc[target_rows.keys(), 1:1 + len(risk_values) - 1]
+        selected_data.index = [target_rows[i] for i in selected_data.index]
 
-        df_combined = pd.concat([df_ed, df_hypo], axis=1).dropna()
-        df_combined["Grade"] = risk_values.loc[df_combined.index].values
-        df_combined["Group"] = df_combined["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
-        return df_combined
+        # Transpose and convert to numeric
+        df_selected = selected_data.T.apply(pd.to_numeric, errors='coerce')
+
+        # Add risk grade and group columns
+        df_selected["Grade"] = risk_values.loc[df_selected.index].values
+        df_selected["Group"] = df_selected["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
+
+        return df_selected
+
 
     # ================================
     # 📌 Stat Summary Extractor
     # ================================
-    if analysis_type == "📌 Stat Summary Extractor":
+    if analysis_type == "Descriptive Analysis":
+        st.header("📊Descriptive Analysis")
+
         target_rows = {
-            17: "Taille (m)", 18: "Poids (kg)", 35: "MESI PRESSION GO D", 36: "MESI PRESSION GO G",
-            37: "IPS GO D", 38: "IPS GO G", 94: "AMPLI MTP1 D", 95: "AMPLI MTP1 G",
-            96: "AMPLI TALO CRURALE D", 97: "AMPLI TALO CRURALE G",
-            108: "Pression MOYENNE DES MAX SESA D", 109: "Pression MOYENNE DES MAX HALLUX D",
-            110: "Pression MOYENNE DES MAX  TM5 D", 113: "Pression MOYENNE DES MAX  SESA G",
-            114: "Pression MOYENNE DES MAX  HALLUX G", 115: "Pression MOYENNE DES MAX  TM5 G",
-            118: "DURO SESA D", 119: "DURO HALLUX D", 120: "DURO TM5 D", 122: "DURO SESA G",
-            123: "DURO HALLUX G", 124: "DURO TM5 G", 142: "Épaisseur TOTALE PARTIES MOLLES  SESA D",
-            143: "Épaisseur TOTALE PARTIES MOLLES  HALLUX D", 144: "Épaisseur TOTALE PARTIES MOLLES  TM5 D",
-            146: "Épaisseur TOTALE PARTIES MOLLES  SESA G", 147: "Épaisseur TOTALE PARTIES MOLLES  HALLUX G",
-            148: "Épaisseur TOTALE PARTIES MOLLES  TM5 G", 150: "ROC SESA D", 151: "ROC HALLUX D",
-            152: "ROC TM5 D", 154: "ROC SESA G", 155: "ROC HALLUX G", 156: "ROC TM5 G",
-            212: "SUDOSCAN main D", 213: "SUDOSCAN main G", 214: "SUDOSCAN pied D", 215: "SUDOSCAN pied G"
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L", 94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L",
+            96: "ROM Ankle R", 97: "ROM Ankle L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
         }
 
-        summary = []
-        deviation_table = {}
+        normal_params = []
+        non_normal_params = []
+        summary_data = []
 
-        for row_index, label in target_rows.items():
-            values = pd.to_numeric(df.iloc[row_index, 1:], errors='coerce').dropna()
+        ecart_df = pd.DataFrame()
+
+        for idx, label in target_rows.items():
+            raw_values = df.iloc[idx, 1:]
+            values = pd.to_numeric(raw_values, errors='coerce').dropna()
+
             if values.empty:
                 continue
+
             mean = values.mean()
-            std_dev = values.std()
-            deviation = values - mean
+            median = values.median()
+            std = values.std()
+            min_val = values.min()
+            max_val = values.max()
+            q1 = values.quantile(0.25)
+            q3 = values.quantile(0.75)
+            ecart = values - mean
 
-            summary.append({"Measure": label, "Mean": round(mean, 2), "Standard Deviation": round(std_dev, 2)})
-            deviation_table[label] = deviation.round(2)
+            # Normality test
+            w_stat, p_value = shapiro(values)
 
-        summary_df = pd.DataFrame(summary)
-        deviation_df = pd.DataFrame(deviation_table).dropna()
-        deviation_df.index.name = "Patient Index"
+            summary_data.append({
+                "Label": label,
+                "Mean": round(mean, 2),
+                "Median": round(median, 2),
+                "StdDev": round(std, 2),
+                "Min": round(min_val, 2),
+                "Q1": round(q1, 2),
+                "Q3": round(q3, 2),
+                "Max": round(max_val, 2),
+                "Shapiro-W": round(w_stat, 4),
+                "p-value": round(p_value, 4),
+                "Normal": p_value > 0.05
+            })
 
-        st.subheader("📊 Summary Table")
-        st.dataframe(summary_df)
+            if p_value > 0.05:
+                normal_params.append(label)
+            else:
+                non_normal_params.append(label)
 
-        st.subheader("📉 Deviation from Mean (Écart à la Moyenne)")
-        st.dataframe(deviation_df)
+            with st.expander(f"🔍 {label}"):
+                st.write(f"**Mean:** {mean:.2f}")
+                st.write(f"**Median:** {median:.2f}")
+                st.write(f"**Std Dev:** {std:.2f}")
+                st.write(f"**Min:** {min_val:.2f} | **Q1:** {q1:.2f} | **Q3:** {q3:.2f} | **Max:** {max_val:.2f}")
+                st.write(f"**Shapiro-Wilk W:** {w_stat:.4f} | **p-value:** {p_value:.4f}")
 
-        output_filename = "DIAFOOT_stats_and_deviation.xlsx"
-        with pd.ExcelWriter(output_filename) as writer:
+                # Plot boxplot with mean line
+                fig, ax = plt.subplots()
+                sns.boxplot(x=values, ax=ax, color='lightblue', fliersize=5)
+                ax.axvline(mean, color='red', linestyle='--', label=f'Mean ({mean:.2f})')
+                ax.axvline(median, color='green', linestyle='-', label=f'Median ({median:.2f})')
+                ax.legend()
+                st.pyplot(fig)
+
+                st.dataframe(ecart.rename("Deviation from Mean").reset_index(drop=True))
+
+
+            with st.expander(f"🔍 {label}"):
+                st.write(f"**Mean**: {mean:.2f}")
+                st.write(f"**Standard Deviation**: {std:.2f}")
+                st.write(f"**Shapiro-W**: {w_stat:.4f} | **p-value**: {p_value:.4f}")
+                st.write(f"Min: {min_val:.2f}, Q1: {q1:.2f}, Median: {median:.2f}, Q3: {q3:.2f}, Max: {max_val:.2f}")
+                st.dataframe(ecart.rename("Deviation from Mean").reset_index(drop=True))
+
+
+        # Create Excel file for download
+        summary_df = pd.DataFrame(summary_data)
+        with pd.ExcelWriter("stat_summary.xlsx", engine="xlsxwriter") as writer:
             summary_df.to_excel(writer, sheet_name="Summary", index=False)
-            deviation_df.to_excel(writer, sheet_name="Deviation from Mean")
+            ecart_df.to_excel(writer, sheet_name="Deviation", index=False)
 
-        with open(output_filename, "rb") as f:
-            st.download_button("📤 Download Excel File", f, file_name=output_filename)
+        # Convert Excel to downloadable bytes
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            summary_df.to_excel(writer, sheet_name="Summary", index=False)
+            ecart_df.to_excel(writer, sheet_name="Deviation", index=False)
+        output.seek(0)
+
+        st.download_button(
+            label="📥 Download Excel Report",
+            data=output,
+            file_name="DIAFOOT_Stat_Summary.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+
+    # ================================
+    # 📌 Normality Tests
+    # ================================
+    elif analysis_type == "Normality Tests":
+        st.header("📊 Normality Tests for DIAFOOT Parameters")
+
+        st.markdown("""
+        **Normality Tests:**  
+        - Shapiro-Wilk Test: suitable for small to medium samples  
+        - Kolmogorov-Smirnov Test  
+        \n
+        **Interpretation:**  
+        - If p-value > 0.05 → data follows a normal distribution  
+        - If p-value ≤ 0.05 → data is non-normal, non-parametric tests are recommended  
+        """)
+
+        target_rows = {
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L", 94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L",
+            96: "ROM Ankle R", 97: "ROM Ankle L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
+        }
+
+
+        normal_params = []
+        non_normal_params = []
+        summary_data = []
+
+        for idx, label in target_rows.items():
+            raw_values = df.iloc[idx, 1:]
+            values = pd.to_numeric(raw_values, errors='coerce').dropna()
+
+            if values.empty:
+                continue
+
+            # Shapiro-Wilk Test
+            w_stat, p_shapiro = shapiro(values)
+            # Kolmogorov-Smirnov Test against normal distribution with sample mean and std
+            from scipy.stats import kstest, norm
+            ks_stat, p_ks = kstest(values, 'norm', args=(values.mean(), values.std()))
+
+            is_normal = (p_shapiro > 0.05) and (p_ks > 0.05)
+
+            summary_data.append({
+                "Label": label,
+                "Shapiro-W": round(w_stat, 4),
+                "p-value Shapiro": round(p_shapiro, 4),
+                "KS stat": round(ks_stat, 4),
+                "p-value KS": round(p_ks, 4),
+                "Normal": is_normal
+            })
+
+            if is_normal:
+                normal_params.append(label)
+            else:
+                non_normal_params.append(label)
+
+            with st.expander(f"🔍 {label}"):
+                st.write(f"**Shapiro-Wilk:** W = {w_stat:.4f}, p = {p_shapiro:.4f}")
+                st.write(f"**Kolmogorov-Smirnov:** stat = {ks_stat:.4f}, p = {p_ks:.4f}")
+
+                # Plot histogram + KDE + mean & median lines
+                fig, ax = plt.subplots()
+                sns.histplot(values, kde=True, ax=ax, color='skyblue', bins=15)
+                ax.axvline(values.mean(), color='red', linestyle='--', label=f'Mean ({values.mean():.2f})')
+                ax.axvline(values.median(), color='green', linestyle='-', label=f'Median ({values.median():.2f})')
+                ax.legend()
+                st.pyplot(fig)
+
+        # Display summary tables
+        st.subheader("✅ Normally Distributed Parameters")
+        if normal_params:
+            st.table(pd.DataFrame(normal_params, columns=["Parameter"]))
+        else:
+            st.write("None")
+
+        st.subheader("⚠️ Non-Normal Parameters")
+        if non_normal_params:
+            st.table(pd.DataFrame(non_normal_params, columns=["Parameter"]))
+        else:
+            st.write("None")
+
+    # ================================
+    # 📌 Comparison of Left and Right Foot Parameters
+    # ================================
+    elif analysis_type == "Comparison of Left and Right Foot Parameters":
+
+        st.header("🦶 Comparison of Left and Right Foot Parameters with Plots")
+
+        target_rows = {
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L", 94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L",
+            96: "ROM Ankle R", 97: "ROM Ankle L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
+        }
+
+        # Generate paired parameters list
+        paired_parameters = []
+        for idx_r, label_r in target_rows.items():
+            if label_r.endswith(" R"):
+                label_l = label_r[:-2] + " L"
+                idx_l = next((i for i, lbl in target_rows.items() if lbl == label_l), None)
+                if idx_l is not None:
+                    paired_parameters.append((label_r, label_l, idx_r, idx_l))
+
+        st.subheader("🔬 Paired Tests + Boxplots")
+
+        for label_r, label_l, idx_r, idx_l in paired_parameters:
+            values_r = pd.to_numeric(df.iloc[idx_r, 1:], errors='coerce').dropna()
+            values_l = pd.to_numeric(df.iloc[idx_l, 1:], errors='coerce').dropna()
+
+            common_len = min(len(values_r), len(values_l))
+            values_r = values_r.iloc[:common_len]
+            values_l = values_l.iloc[:common_len]
+
+            # Normality tests
+            p_r = shapiro(values_r)[1]
+            p_l = shapiro(values_l)[1]
+
+            if p_r > 0.05 and p_l > 0.05:
+                stat, p_val = ttest_rel(values_r, values_l)
+                test_name = "Paired t-test"
+            else:
+                stat, p_val = wilcoxon(values_r, values_l)
+                test_name = "Wilcoxon signed-rank test"
+
+            st.markdown(f"### {label_r} vs {label_l}")
+            st.write(f"**Test used:** {test_name}")
+            st.write(f"**Statistic:** {stat:.4f}", f"**p-value:** {p_val:.4f}")
+
+            data_plot = pd.DataFrame({
+                'Right': values_r.reset_index(drop=True),
+                'Left': values_l.reset_index(drop=True)
+            })
+
+            # Plot boxplot
+            fig, ax = plt.subplots(figsize=(6, 4))
+            sns.boxplot(data=data_plot, ax=ax, palette=["#90CAF9", "#F48FB1"])
+
+            # Draw mean and median lines
+            for i, col in enumerate(data_plot.columns):
+                mean_val = data_plot[col].mean()
+                median_val = data_plot[col].median()
+                ax.hlines(mean_val, i - 0.25, i + 0.25, colors='red', label='Mean' if i == 0 else "", linewidth=2)
+                ax.hlines(median_val, i - 0.25, i + 0.25, colors='blue', label='Median' if i == 0 else "", linewidth=2, linestyles='--')
+
+            # Only show one legend entry per label
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            ax.legend(by_label.values(), by_label.keys())
+            ax.set_title(f"Distribution: {label_r} vs {label_l}")
+            st.pyplot(fig)
+            st.markdown("---")
+
+    # ================================
+    # 📌 IWGDF Risk Grade Summary & KMeans Clustering
+    # ================================
+    elif analysis_type == "📌 IWGDF Risk Grade Summary & Clustering":
+
+
+        # Locate IWGDF risk grade row
+        label_risk = "Grade de risque IWGDF"
+        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
+        
+        if row_risk.empty:
+            st.error(f"Label '{label_risk}' not found in the Excel sheet.")
+            st.stop()
+
+        idx_risk = row_risk.index[0]
+        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
+        patient_ids = pd.Series(range(1, len(risk_values) + 1), index=risk_values.index)
+
+        # Basic statistics
+        min_iwgdf = risk_values.min()
+        max_iwgdf = risk_values.max()
+        mean_iwgdf = risk_values.mean()
+
+        low_moderate_patients = risk_values[risk_values.isin([0, 1])].index + 1
+        high_very_high_patients = risk_values[risk_values.isin([2, 3])].index + 1
+
+        st.subheader("📈 IWGDF Risk Grade Summary")
+        st.markdown(f"""
+        - **Grade range**: {min_iwgdf} (low) to {max_iwgdf} (very high)
+        - **Average grade**: ~{mean_iwgdf:.1f}
+        - **Low/Moderate Risk (0–1)**: Patients {', '.join(map(str, low_moderate_patients.tolist()))}
+        - **High/Very High Risk (2–3)**: Patients {', '.join(map(str, high_very_high_patients.tolist()))}
+        """)
+
+        # Frequency table
+        freq = pd.Series([0, 1, 2, 3]).apply(lambda x: (risk_values == x).sum())
+        freq.index = [0, 1, 2, 3]
+        risk_labels = {0: "Low risk", 1: "Moderate risk", 2: "High risk", 3: "Very high risk"}
+
+        st.markdown("### 📊 Frequency of Each IWGDF Risk Grade")
+        freq_df = pd.DataFrame({
+            "Grade": freq.index,
+            "Label": [risk_labels[g] for g in freq.index],
+            "Count": freq.values
+        })
+        st.dataframe(freq_df)
+
+        # Clustering
+        X = risk_values.values.reshape(-1, 1)
+        kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
+        clusters = kmeans.fit_predict(X)
+
+        results = pd.DataFrame({
+            "Patient": patient_ids.values,
+            "IWGDF_Grade": risk_values.values,
+            "Cluster": clusters
+        })
+
+        # Plot clustering result
+        fig, ax = plt.subplots(figsize=(8, 4))
+        scatter = ax.scatter(results["Patient"], results["IWGDF_Grade"], c=results["Cluster"], cmap="viridis", s=100)
+        ax.set_xlabel("Patient")
+        ax.set_ylabel("IWGDF Grade")
+        ax.set_title("Clustering Patients Based on IWGDF Grade")
+        ax.set_xticks(results["Patient"])
+        ax.set_yticks([0, 1, 2, 3])
+        ax.grid(True)
+        st.pyplot(fig)
+
+        # Cluster summary
+        st.markdown("### 🧾 Cluster Composition")
+        cluster_summary = results.groupby("Cluster")["IWGDF_Grade"].agg(["count", "mean", "min", "max"])
+        st.dataframe(cluster_summary)
+
+        # Optional download
+        output_file = "IWGDF_clustering_results.xlsx"
+        with pd.ExcelWriter(output_file) as writer:
+            results.to_excel(writer, sheet_name="Clustering", index=False)
+            freq_df.to_excel(writer, sheet_name="Frequencies", index=False)
+
+        with open(output_file, "rb") as f:
+            st.download_button("📤 Download Clustering Results", f, file_name=output_file)
+
             
     # ================================
     # 📌 IWGDF Risk Grade Summary & KMeans Clustering
