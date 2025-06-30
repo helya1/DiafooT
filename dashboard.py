@@ -35,7 +35,7 @@ if uploaded_file:
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
         ("Descriptive Analysis", "Normality Tests","Comparison of Left and Right Foot Parameters",
-        "IWGDF Risk Grade Summary & Clustering", "Correlation Between Key Parameters", "Intra-Group Comparison")
+        "IWGDF Risk Grade Summary & Clustering", "Correlation Between Key Parameters", "Intra-Group Comparison", "test")
     )
 
     # ================================
@@ -971,9 +971,59 @@ if uploaded_file:
                 st.markdown(f"**{col}** — {test_type}, p = `{pval:.4f}`")
                 
 
+
+
+    elif analysis_type == "test":
+        st.header("🤖 Clustering des patients (KMeans + PCA)")
+
+        numeric_cols = df_combined.select_dtypes(include=[np.number]).drop(columns=["Grade"]).columns.tolist()
+        df_clean = df_combined[numeric_cols].dropna()
+        if df_clean.shape[0] < 3:
+            st.warning("Pas assez de patients pour le clustering (au moins 3 lignes valides nécessaires).")
+            st.stop()
+
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(df_clean)
+
+        n_clusters = st.slider("🔢 Nombre de clusters", 2, 6, 3)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init="auto")
+        clusters = kmeans.fit_predict(data_scaled)
+
+        df_result = df_clean.copy()
+        df_result["Cluster"] = clusters
+        df_result["Grade"] = df_combined.loc[df_clean.index, "Grade"].values
+
+        silhouette = silhouette_score(data_scaled, clusters)
+        st.markdown(f"**✅ Silhouette Score :** {silhouette:.3f}")
+
+        pca = PCA(n_components=2)
+        components = pca.fit_transform(data_scaled)
+        df_result["PCA1"] = components[:, 0]
+        df_result["PCA2"] = components[:, 1]
+
+        color_by = st.radio("🎨 Colorier par :", ["Cluster", "Grade"], horizontal=True)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        sns.scatterplot(
+            data=df_result, x="PCA1", y="PCA2",
+            hue=df_result[color_by],
+            palette="Set2", s=100, edgecolor='black'
+        )
+        plt.title("Projection PCA des patients")
+        plt.xlabel("PCA 1")
+        plt.ylabel("PCA 2")
+        plt.grid(True)
+        st.pyplot(fig)
+
+        with st.expander("🧾 Données de clustering"):
+            st.dataframe(df_result.reset_index())
+
+
+
 # ================================
 # 📎 File Not Uploaded Message
 # ================================
 else:
     st.info("Please upload an Excel file containing the 'DIAFOOT' sheet.")
+    
     
