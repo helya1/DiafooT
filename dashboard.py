@@ -11,6 +11,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import ttest_rel, wilcoxon, shapiro
 import io
+from scipy.stats import mannwhitneyu
 from matplotlib import cm
 cm.get_cmap("coolwarm")
 
@@ -28,58 +29,41 @@ uploaded_file = st.file_uploader("Upload Excel file with 'DIAFOOT' sheet", type=
 if uploaded_file:
     df = pd.read_excel(uploaded_file, sheet_name="DIAFOOT", header=None)
 
+#"Classification – Predict Risk Group",
+#"📌 ED Thickness & Hypodermis Ultrasound Analysis", 
+#"📌 GMM Clustering vs Grades", 
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
-        ("Descriptive Analysis", "Normality Tests","Comparison of Left and Right Foot Parameters", "📌 IWGDF Risk Grade Summary & Clustering",
-        "📌 ED Thickness & Hypodermis Ultrasound Analysis", "📌 GMM Clustering vs Grades")
+        ("Descriptive Analysis", "Normality Tests","Comparison of Left and Right Foot Parameters",
+        "IWGDF Risk Grade Summary & Clustering", "Correlation Between Key Parameters", "Intra-Group Comparison")
     )
 
     # ================================
     # 🧹 Data Preparation Function
     # ================================
     def prepare_data(df):
-        # Define the risk label and get values from row 17 (which is index 16 in Python)
-        label_risk = "Grade de risque IWGDF"
         row_risk = df.iloc[16]
-        
-        if str(row_risk[0]).strip().lower() != label_risk.lower():
-            st.error(f"Label '{label_risk}' not found in row 17 (index 16).")
+        if str(row_risk[0]).strip().lower() != "grade de risque iwgdf":
+            st.error("Label 'Grade de risque IWGDF' not found in row 17.")
             st.stop()
 
-        # Extract risk grades from the row (skip first column)
         risk_values = pd.to_numeric(row_risk[1:], errors='coerce').dropna().astype(int)
 
-        # Define the rows to extract (biomechanical, clinical, and ultrasound parameters)
         target_rows = {
             17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
             37: "ABI R", 38: "ABI L", 94: "ROM MTP1 R", 95: "ROM MTP1 L",
-            96: "ROM Ankle R", 97: "ROM Ankle L",
-            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
-            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
-            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
-            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
-            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
-            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
-            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
-            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
+            96: "ROM Ankle R", 97: "ROM Ankle L"
         }
 
-        # Extract data rows and rename them
         selected_data = df.loc[target_rows.keys(), 1:1 + len(risk_values) - 1]
         selected_data.index = [target_rows[i] for i in selected_data.index]
-
-        # Transpose and convert to numeric
         df_selected = selected_data.T.apply(pd.to_numeric, errors='coerce')
 
-        # Add risk grade and group columns
         df_selected["Grade"] = risk_values.loc[df_selected.index].values
         df_selected["Group"] = df_selected["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
-
         return df_selected
 
+    df_combined = prepare_data(df)
 
     # ================================
     # 📌 Stat Summary Extractor
@@ -165,14 +149,12 @@ if uploaded_file:
 
                 st.dataframe(ecart.rename("Deviation from Mean").reset_index(drop=True))
 
-
             with st.expander(f"🔍 {label}"):
                 st.write(f"**Mean**: {mean:.2f}")
                 st.write(f"**Standard Deviation**: {std:.2f}")
                 st.write(f"**Shapiro-W**: {w_stat:.4f} | **p-value**: {p_value:.4f}")
                 st.write(f"Min: {min_val:.2f}, Q1: {q1:.2f}, Median: {median:.2f}, Q3: {q3:.2f}, Max: {max_val:.2f}")
                 st.dataframe(ecart.rename("Deviation from Mean").reset_index(drop=True))
-
 
         # Create Excel file for download
         summary_df = pd.DataFrame(summary_data)
@@ -193,7 +175,6 @@ if uploaded_file:
             file_name="DIAFOOT_Stat_Summary.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
 
     # ================================
     # 📌 Normality Tests
@@ -227,7 +208,6 @@ if uploaded_file:
             154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
             212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
         }
-
 
         normal_params = []
         non_normal_params = []
@@ -372,13 +352,12 @@ if uploaded_file:
     # ================================
     # 📌 IWGDF Risk Grade Summary & KMeans Clustering
     # ================================
-    elif analysis_type == "📌 IWGDF Risk Grade Summary & Clustering":
-
+    elif analysis_type == "IWGDF Risk Grade Summary & Clustering":
 
         # Locate IWGDF risk grade row
         label_risk = "Grade de risque IWGDF"
         row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
-        
+
         if row_risk.empty:
             st.error(f"Label '{label_risk}' not found in the Excel sheet.")
             st.stop()
@@ -443,6 +422,46 @@ if uploaded_file:
         cluster_summary = results.groupby("Cluster")["IWGDF_Grade"].agg(["count", "mean", "min", "max"])
         st.dataframe(cluster_summary)
 
+        # ==== Scatter plots for all features ====
+
+        st.markdown("### 🎨 Scatter Plots of Features vs IWGDF Risk Grade")
+
+        target_rows = {
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "ABI R", 38: "ABI L", 94: "ROM MTP1 R", 95: "ROM MTP1 L",
+            96: "ROM Ankle R", 97: "ROM Ankle L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L"
+        }
+
+        # Extract feature data matching risk_values length
+        selected_data = df.loc[target_rows.keys(), 1:1 + len(risk_values) - 1]
+        selected_data.index = [target_rows[i] for i in selected_data.index]
+        df_features = selected_data.T.apply(pd.to_numeric, errors='coerce')
+
+        # Add the risk grade column for coloring/scatter Y axis
+        df_features["IWGDF_Grade"] = risk_values.values
+
+        # Plot scatter for each feature against IWGDF Grade
+        for feature in df_features.columns[:-1]:
+            fig2, ax2 = plt.subplots(figsize=(6, 3))
+            sc = ax2.scatter(df_features[feature], df_features["IWGDF_Grade"], 
+                            c=df_features["IWGDF_Grade"], cmap="coolwarm", s=60, edgecolor='k', alpha=0.7)
+            ax2.set_xlabel(feature)
+            ax2.set_ylabel("IWGDF Grade")
+            ax2.set_title(f"{feature} vs IWGDF Grade")
+            plt.colorbar(sc, ax=ax2, label="IWGDF Grade")
+            st.pyplot(fig2)
+
         # Optional download
         output_file = "IWGDF_clustering_results.xlsx"
         with pd.ExcelWriter(output_file) as writer:
@@ -452,94 +471,60 @@ if uploaded_file:
         with open(output_file, "rb") as f:
             st.download_button("📤 Download Clustering Results", f, file_name=output_file)
 
+    # ================================
+    # Classification – Predict Risk Grou
+    # ================================
+    elif analysis_type == "Classification – Predict Risk Group":
+        st.header("📌 Predict Risk Group using Biomechanical & Clinical Features")
+
+        from sklearn.model_selection import train_test_split
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+        features = df_combined.drop(columns=["Grade", "Group"])
+        features = features.dropna(axis=0, how='any')
+        target = df_combined.loc[features.index, "Group"].map({"A (Grades 0-1)": 0, "B (Grades 2-3)": 1})
+        target.name = "Target"
+        if features.empty or target.empty:
+            st.error("Features or target data is empty after removing missing values.")
+            st.stop()
+        X = features
+        y = target
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+
+
+        clf = RandomForestClassifier(n_estimators=100, random_state=42)
+        clf.fit(X_train, y_train)
+
+        # Predict
+        y_pred = clf.predict(X_test)
+
+        # Accuracy
+        acc = clf.score(X_test, y_test)
+        st.success(f"✅ Model Accuracy: {acc * 100:.2f}%")
+
+        # Classification report
+        st.text("📊 Classification Report:")
+        st.code(classification_report(y_test, y_pred, target_names=["Group A (0–1)", "Group B (2–3)"]))
+
+        # Confusion matrix
+        fig_cm, ax_cm = plt.subplots()
+        ConfusionMatrixDisplay.from_predictions(y_test, y_pred, display_labels=["Group A", "Group B"], ax=ax_cm)
+        st.pyplot(fig_cm)
+
+        # Feature importances
+        importances = pd.Series(clf.feature_importances_, index=X.columns).sort_values(ascending=False)
+        st.write("📈 Top Predictive Features:")
+        st.bar_chart(importances.head(10))
+
+        # Predict for all data
+        full_preds = df_combined.copy()
+        full_preds = full_preds.dropna(subset=X.columns)
+        full_preds["Predicted Group"] = clf.predict(full_preds[X.columns])
+        full_preds["Predicted Label"] = full_preds["Predicted Group"].map({0: "A", 1: "B"})
+
+        st.dataframe(full_preds[["Grade", "Group", "Predicted Label"] + list(X.columns[:5])])
             
-    # ================================
-    # 📌 IWGDF Risk Grade Summary & KMeans Clustering
-    # ================================
-    elif analysis_type == "📌 IWGDF Risk Grade Summary & Clustering":
-
-        import pandas as pd
-        import matplotlib.pyplot as plt
-        from sklearn.cluster import KMeans
-        import streamlit as st
-
-        # Locate IWGDF risk grade row
-        label_risk = "Grade de risque IWGDF"
-        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
-        
-        if row_risk.empty:
-            st.error(f"Label '{label_risk}' not found in the Excel sheet.")
-            st.stop()
-
-        idx_risk = row_risk.index[0]
-        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
-        patient_ids = pd.Series(range(1, len(risk_values) + 1), index=risk_values.index)
-
-        # Basic statistics
-        min_iwgdf = risk_values.min()
-        max_iwgdf = risk_values.max()
-        mean_iwgdf = risk_values.mean()
-
-        low_moderate_patients = risk_values[risk_values.isin([0, 1])].index + 1
-        high_very_high_patients = risk_values[risk_values.isin([2, 3])].index + 1
-
-        st.subheader("📈 IWGDF Risk Grade Summary")
-        st.markdown(f"""
-        - **Grade range**: {min_iwgdf} (low) to {max_iwgdf} (very high)
-        - **Average grade**: ~{mean_iwgdf:.1f}
-        - **Low/Moderate Risk (0–1)**: Patients {', '.join(map(str, low_moderate_patients.tolist()))}
-        - **High/Very High Risk (2–3)**: Patients {', '.join(map(str, high_very_high_patients.tolist()))}
-        """)
-
-        # Frequency table
-        freq = pd.Series([0, 1, 2, 3]).apply(lambda x: (risk_values == x).sum())
-        freq.index = [0, 1, 2, 3]
-        risk_labels = {0: "Low risk", 1: "Moderate risk", 2: "High risk", 3: "Very high risk"}
-
-        st.markdown("### 📊 Frequency of Each IWGDF Risk Grade")
-        freq_df = pd.DataFrame({
-            "Grade": freq.index,
-            "Label": [risk_labels[g] for g in freq.index],
-            "Count": freq.values
-        })
-        st.dataframe(freq_df)
-
-        # Clustering
-        X = risk_values.values.reshape(-1, 1)
-        kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
-        clusters = kmeans.fit_predict(X)
-
-        results = pd.DataFrame({
-            "Patient": patient_ids.values,
-            "IWGDF_Grade": risk_values.values,
-            "Cluster": clusters
-        })
-
-        # Plot clustering result
-        fig, ax = plt.subplots(figsize=(8, 4))
-        scatter = ax.scatter(results["Patient"], results["IWGDF_Grade"], c=results["Cluster"], cmap="viridis", s=100)
-        ax.set_xlabel("Patient")
-        ax.set_ylabel("IWGDF Grade")
-        ax.set_title("Clustering Patients Based on IWGDF Grade")
-        ax.set_xticks(results["Patient"])
-        ax.set_yticks([0, 1, 2, 3])
-        ax.grid(True)
-        st.pyplot(fig)
-
-        # Cluster summary
-        st.markdown("### 🧾 Cluster Composition")
-        cluster_summary = results.groupby("Cluster")["IWGDF_Grade"].agg(["count", "mean", "min", "max"])
-        st.dataframe(cluster_summary)
-
-        # Optional download
-        output_file = "IWGDF_clustering_results.xlsx"
-        with pd.ExcelWriter(output_file) as writer:
-            results.to_excel(writer, sheet_name="Clustering", index=False)
-            freq_df.to_excel(writer, sheet_name="Frequencies", index=False)
-
-        with open(output_file, "rb") as f:
-            st.download_button("📤 Download Clustering Results", f, file_name=output_file)
-
     # ================================
     # 📌 KMeans Clustering  *
     # Top 6 features most correlated with Grade
@@ -727,7 +712,6 @@ if uploaded_file:
             ax_coef.set_title("Feature Importance for Grade Prediction")
             st.pyplot(fig_coef)
 
-
     # ================================
     # 📌 GMM Clustering vs Grades
     # Top 6 features most correlated with Grade
@@ -842,7 +826,7 @@ if uploaded_file:
     # ================================
     # 📌 Correlation Between Key Parameters
     # ================================
-    elif analysis_type == "📌 Correlation Between Key Parameters":
+    elif analysis_type == "Correlation Between Key Parameters":
         st.subheader("🔗 Correlation Between Selected DIAFOOT Parameters")
 
         target_rows = {
@@ -861,6 +845,7 @@ if uploaded_file:
             212: "SUDOSCAN main D", 213: "SUDOSCAN main G", 214: "SUDOSCAN pied D", 215: "SUDOSCAN pied G"
         }
 
+        # Extract data from rows into a DataFrame
         data_dict = {}
         for row_index, label in target_rows.items():
             values = pd.to_numeric(df.iloc[row_index, 1:], errors='coerce')
@@ -868,22 +853,27 @@ if uploaded_file:
 
         df_corr = pd.DataFrame(data_dict).dropna()
 
-        st.write("### 🧾 Cleaned Data Table (dropna)")
+        if df_corr.empty or df_corr.shape[0] < 2:
+            st.warning("⚠️ Not enough valid data to compute correlation. Please check your Excel file.")
+            st.stop()
+
+        st.write("### 📋 Cleaned Data Table (dropna)")
         st.dataframe(df_corr)
 
         # Correlation matrix
+        st.write("### 📊 Correlation Matrix (Pearson)")
         corr_matrix = df_corr.corr()
 
-        st.write("### 📊 Correlation Matrix")
         cmap = "coolwarm"
         st.dataframe(corr_matrix.style.background_gradient(cmap=cmap, axis=None).format("{:.2f}"))
 
-        fig_corr, ax = plt.subplots(figsize=(14, 12))
-        sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap="coolwarm", linewidths=0.5, ax=ax)
-        ax.set_title("Correlation Heatmap of Selected Parameters", fontsize=16)
+        # Heatmap
+        fig_corr, ax_corr = plt.subplots(figsize=(14, 12))
+        sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap=cmap, linewidths=0.5, ax=ax_corr)
+        ax_corr.set_title("Correlation Heatmap of Selected Parameters", fontsize=16)
         st.pyplot(fig_corr)
 
-        # Optional: correlation with a specific variable
+        # Optional: Show correlation of selected variable with others
         selected_ref = st.selectbox("📌 Show correlations with a specific variable:", corr_matrix.columns.tolist())
         ref_corr = corr_matrix[selected_ref].drop(labels=[selected_ref])
         ref_corr_sorted = ref_corr.reindex(ref_corr.abs().sort_values(ascending=False).index)
@@ -895,76 +885,95 @@ if uploaded_file:
         ax_bar.set_xlim(-1, 1)
         st.pyplot(fig_bar)
 
-    # ================================
-    # 📌 Mechanical Features Correlation Analysis
-    # ================================
-    elif analysis_type == "📌 Mechanical Features Correlation Analysis":
+        # Detect high correlation pairs
+        st.markdown("### 🔍 Highly Correlated Pairs")
+        threshold = st.slider("🔧 Correlation threshold", 0.5, 1.0, 0.8, 0.05)
+        high_corr_pairs = []
 
-        target_rows = {
-            17: "Taille (m)", 18: "Poids (kg)", 35: "MESI PRESSION GO D", 36: "MESI PRESSION GO G",
-            37: "IPS GO D", 38: "IPS GO G", 94: "AMPLI MTP1 D", 95: "AMPLI MTP1 G",
-            96: "AMPLI TALO CRURALE D", 97: "AMPLI TALO CRURALE G",
-            108: "Pression MOYENNE DES MAX SESA D", 109: "Pression MOYENNE DES MAX HALLUX D",
-            110: "Pression MOYENNE DES MAX  TM5 D", 113: "Pression MOYENNE DES MAX  SESA G",
-            114: "Pression MOYENNE DES MAX  HALLUX G", 115: "Pression MOYENNE DES MAX  TM5 G",
-            118: "DURO SESA D", 119: "DURO HALLUX D", 120: "DURO TM5 D", 122: "DURO SESA G",
-            123: "DURO HALLUX G", 124: "DURO TM5 G", 142: "Épaisseur TOTALE PARTIES MOLLES  SESA D",
-            143: "Épaisseur TOTALE PARTIES MOLLES  HALLUX D", 144: "Épaisseur TOTALE PARTIES MOLLES  TM5 D",
-            146: "Épaisseur TOTALE PARTIES MOLLES  SESA G", 147: "Épaisseur TOTALE PARTIES MOLLES  HALLUX G",
-            148: "Épaisseur TOTALE PARTIES MOLLES  TM5 G", 150: "ROC SESA D", 151: "ROC HALLUX D",
-            152: "ROC TM5 D", 154: "ROC SESA G", 155: "ROC HALLUX G", 156: "ROC TM5 G",
-            212: "SUDOSCAN main D", 213: "SUDOSCAN main G", 214: "SUDOSCAN pied D", 215: "SUDOSCAN pied G"
-        }
-        st.subheader("🔬 Analyse de corrélation entre les paramètres mécaniques")
+        for i in range(len(corr_matrix.columns)):
+            for j in range(i + 1, len(corr_matrix.columns)):
+                val = corr_matrix.iloc[i, j]
+                if abs(val) >= threshold:
+                    high_corr_pairs.append({
+                        "Feature 1": corr_matrix.columns[i],
+                        "Feature 2": corr_matrix.columns[j],
+                        "Correlation": round(val, 3)
+                    })
 
-        data = {}
-        labels = []
-
-        for row_idx, label in target_rows.items():
-            values = pd.to_numeric(df.iloc[row_idx, 1:], errors="coerce")
-            if values.isna().sum() < len(values): 
-                data[label] = values
-                labels.append(label)
-
-        mech_df = pd.DataFrame(data)
-
-        if mech_df.empty or len(mech_df) < 2:
-            st.warning("Pas assez de données valides pour cette analyse.")
+        if high_corr_pairs:
+            st.dataframe(pd.DataFrame(high_corr_pairs))
+            st.markdown("💡 *Consider removing one variable from each pair with high correlation to reduce redundancy in models.*")
         else:
-            st.write("### 🧾 Données disponibles")
-            st.dataframe(mech_df)
+            st.success("✅ No pairs with correlation above the threshold.")
 
-            corr = mech_df.corr()
+    # =====================================================
+    # Intra-Group Comparison
+    # =====================================================
+    elif analysis_type == "Intra-Group Comparison":
+        st.header("📈 Intra-Group Comparison")
 
-            st.write("### 🔗 Matrice de corrélation")
-            fig_corr, ax_corr = plt.subplots(figsize=(16, 10))
-            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", ax=ax_corr, mask=np.triu(np.ones_like(corr, dtype=bool)))
-            st.pyplot(fig_corr)
+        selected_group = st.radio("Choose a group for intra-group comparison:", ["A (Grades 0-1)", "B (Grades 2-3)"])
+        g1, g2 = (0, 1) if selected_group == "A (Grades 0-1)" else (2, 3)
 
-            threshold = st.slider("Seuil de corrélation élevée", 0.5, 1.0, 0.8, 0.05)
-            high_corr_pairs = []
+        sub1 = df_combined[df_combined["Grade"] == g1]
+        sub2 = df_combined[df_combined["Grade"] == g2]
 
-            for i in range(len(corr.columns)):
-                for j in range(i + 1, len(corr.columns)):
-                    val = corr.iloc[i, j]
-                    if abs(val) >= threshold:
-                        high_corr_pairs.append({
-                            "Feature 1": corr.columns[i],
-                            "Feature 2": corr.columns[j],
-                            "Correlation": round(val, 3)
-                        })
+        st.markdown(f"- **Group**: {selected_group} — comparing Grade {g1} vs Grade {g2}")
+        st.markdown(f"- Grade {g1}: {len(sub1)} patients | Grade {g2}: {len(sub2)} patients")
 
-            if high_corr_pairs:
-                st.write(f"### 🚨 Paires avec corrélation absolue > {threshold}")
-                st.dataframe(pd.DataFrame(high_corr_pairs))
+        for col in df_combined.columns[:-2]:
+            values1 = pd.to_numeric(sub1[col], errors='coerce').dropna()
+            values2 = pd.to_numeric(sub2[col], errors='coerce').dropna()
+
+            st.write(f"### 🔹 {col}")
+            st.write(f"Grade {g1} - count: {len(values1)}, Grade {g2} - count: {len(values2)}")
+
+            # Shapiro normality check
+            if len(values1) >= 3:
+                p_shapiro1 = shapiro(values1)[1]
+                st.write(f"Shapiro Grade {g1}: p = {p_shapiro1:.4f}")
             else:
-                st.success("Aucune paire avec corrélation élevée selon le seuil défini.")
+                st.write(f"Shapiro Grade {g1}: ❌ Not enough data (min 3)")
 
-            st.markdown("💡 *Vous pouvez envisager de supprimer l'une des variables de chaque paire très corrélée pour réduire la redondance.*")
+            if len(values2) >= 3:
+                p_shapiro2 = shapiro(values2)[1]
+                st.write(f"Shapiro Grade {g2}: p = {p_shapiro2:.4f}")
+            else:
+                st.write(f"Shapiro Grade {g2}: ❌ Not enough data (min 3)")
 
+            # Always do Mann-Whitney
+            stat, pval = mannwhitneyu(values1, values2, alternative='two-sided')
+            st.write(f"**Mann–Whitney U test**: p = `{pval:.4f}`")
+            st.divider()
+
+
+            group_a = df_combined[df_combined["Group"] == "A (Grades 0-1)"]
+            group_b = df_combined[df_combined["Group"] == "B (Grades 2-3)"]
+
+            for col in df_combined.columns[:-2]:
+                values_a = pd.to_numeric(group_a[col], errors='coerce').dropna()
+                values_b = pd.to_numeric(group_b[col], errors='coerce').dropna()
+
+                if len(values_a) < 3 or len(values_b) < 3:
+                    st.write(f"**{col}** – ❗ Not enough data (min 3 per group).")
+                    continue
+
+                is_norm_a = shapiro(values_a)[1] > 0.05
+                is_norm_b = shapiro(values_b)[1] > 0.05
+
+                if is_norm_a and is_norm_b:
+                    stat, pval = ttest_ind(values_a, values_b, equal_var=False)
+                    test_type = "Independent t-test"
+                else:
+                    stat, pval = mannwhitneyu(values_a, values_b, alternative='two-sided')
+                    test_type = "Mann–Whitney U"
+
+                st.markdown(f"**{col}** — {test_type}, p = `{pval:.4f}`")
+                
 
 # ================================
 # 📎 File Not Uploaded Message
 # ================================
 else:
     st.info("Please upload an Excel file containing the 'DIAFOOT' sheet.")
+    
