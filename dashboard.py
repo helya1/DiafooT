@@ -974,7 +974,7 @@ if uploaded_file:
 
 
     elif analysis_type == "test":
-        st.header("🤖 Clustering des patients (KMeans + PCA)")
+        st.header("Clustering des patients (KMeans + PCA)")
 
         numeric_cols = df_combined.select_dtypes(include=[np.number]).drop(columns=["Grade"]).columns.tolist()
         df_clean = df_combined[numeric_cols].dropna()
