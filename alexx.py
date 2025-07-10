@@ -191,13 +191,49 @@ if uploaded_file:
             ax.legend([bp1["boxes"][0], bp2["boxes"][0]], ["Pied Droit", "Pied Gauche"], loc="upper right")
             st.pyplot(fig)
             plt.close(fig)
+            
+
+        def plot_all_zones_comparison(param_key_right, param_key_left, param_name, foot_zones, df_excel, index_map):
+            data_right = extract_param(index_map[param_key_right])
+            data_left = extract_param(index_map[param_key_left])
+
+            # Flatten all zone values into one array per side
+            vals_right_all = []
+            vals_left_all = []
+
+            for i in range(len(foot_zones)):
+                vals_right_zone = pd.to_numeric(data_right.iloc[:, i], errors='coerce').dropna().tolist()
+                vals_left_zone = pd.to_numeric(data_left.iloc[:, i], errors='coerce').dropna().tolist()
+
+                vals_right_all.extend(vals_right_zone)
+                vals_left_all.extend(vals_left_zone)
+
+            if len(vals_right_all) < 2 or len(vals_left_all) < 2:
+                st.warning(f"Pas assez de données globales pour tracer '{param_name}'.")
+                return
+
+            # Boxplot global
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.boxplot([vals_right_all, vals_left_all], patch_artist=True,
+                    labels=["Pied Droit", "Pied Gauche"],
+                    boxprops=dict(facecolor="lightblue"),
+                    medianprops=dict(color='black'))
+
+            ax.set_title(f"📦 Boxplot global – {param_name} (toutes zones)")
+            ax.grid(True)
+            st.pyplot(fig)
+            plt.close(fig)
+
 
         for param_name, key_right, key_left in parameters_comparison_keys:
             st.subheader(f"🔹 {param_name}")
             plot_combined_zonewise_boxplot(key_right, key_left, param_name, foot_zones, df, index_map)
 
-            
 
+        for param_name, key_right, key_left in parameters_comparison_keys:
+            st.subheader(f"🔹 {param_name}")
+            plot_all_zones_comparison(key_right, key_left, param_name, foot_zones, df, index_map)
+            
 
     elif page == "Plot Planck-Hartmann (Individuel)": # Updated page name
         st.header("🎭 Planck-Hartmann - Comparaison Pied Droit / Pied Gauche (Individuel)")
