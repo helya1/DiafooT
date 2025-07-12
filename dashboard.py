@@ -44,10 +44,11 @@ if uploaded_file:
 
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
-        ("Basic Analysis", "Descriptive Analysis", "Normality Tests","Comparison of Left and Right Foot Parameters",
+        ("Basic Analysis", "Descriptive Analysis", "Normality Tests",
+        "Hallux/SESA/TM5 – L/R Comparison by Parameter Type", "Comparison of Left and Right Foot Parameters",
         "IWGDF Risk Grade Summary & Clustering", "Grade  & Clustering", "Correlation Between Key Parameters", 
         "Intra-Group Comparison","Bland-Altman Plots by Parameter and Side", 
-        "Morphological Bar Charts", "Bland-Altman Pooled Plots for all parameters",
+        "Bland-Altman Pooled Plots for all parameters",
         "Multivariate Group Comparison (MANOVA)", "Multiple Linear Regression", "Exploratory PCA")
     )
 
@@ -580,6 +581,114 @@ if uploaded_file:
         else:
             st.write("None")
 
+
+    # ================================
+    # 📌 Hallux/SESA/TM5 – L/R Comparison by Parameter Type
+    # ================================
+    elif analysis_type == "Hallux/SESA/TM5 – L/R Comparison by Parameter Type":
+        st.subheader("📊 Comparison of Left vs Right by Anatomical Zone and Parameter Type")
+
+        ep_derm_rows = {
+            126: "Epiderm+Derm SESA D", 127: "Epiderm+Derm HALLUX D", 128: "Epiderm+Derm TM5 D",
+            130: "Epiderm+Derm SESA G", 131: "Epiderm+Derm HALLUX G", 132: "Epiderm+Derm TM5 G"
+        }
+
+        hypo_rows = {
+            134: "Hypoderm SESA D", 135: "Hypoderm HALLUX D", 136: "Hypoderm TM5 D",
+            138: "Hypoderm SESA G", 139: "Hypoderm HALLUX G", 140: "Hypoderm TM5 G"
+        }
+
+        def plot_bar_parameter(data_dict, title, ylabel):
+            locations = ["HALLUX", "SESA", "TM5"]
+            sides = ["D", "G"]
+            mapped = {"D": "Right", "G": "Left"}
+
+            plot_data = []
+            for loc in locations:
+                for side in sides:
+                    for key, label in data_dict.items():
+                        if loc in label and side in label:
+                            vals = df.loc[key, 1:].astype(float)
+                            mean = vals.mean()
+                            std = vals.std()
+                            plot_data.append({
+                                "Location": loc,
+                                "Side": mapped[side],
+                                "Mean": mean,
+                                "STD": std
+                            })
+
+            plot_df = pd.DataFrame(plot_data)
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            sns.barplot(data=plot_df, x="Location", y="Mean", hue="Side", ax=ax, palette="coolwarm", capsize=0.1)
+            ax.set_title(title)
+            ax.set_ylabel(ylabel)
+            ax.grid(True)
+            st.pyplot(fig)
+
+        plot_bar_parameter(ep_derm_rows, "Combined Epidermis + Dermis Thickness", "Thickness (mm)")
+        plot_bar_parameter(hypo_rows, "Hypodermis Thickness", "Thickness (mm)")
+
+        # Define your anatomical zones
+        zones = ["HALLUX", "SESA", "TM5"]
+        sides = {"R": "Right", "L": "Left"}
+
+        # Function to group parameters by type (based on label keyword)
+        def group_parameters_by_type(target_rows, types_keywords):
+            grouped = {k: {} for k in types_keywords}
+            for row_idx, label in target_rows.items():
+                for zone in zones:
+                    if zone in label:
+                        for code, side in sides.items():
+                            if f"{zone} {code}" in label or f"{code} {zone}" in label:
+                                for k in types_keywords:
+                                    if k.lower() in label.lower():
+                                        grouped[k][row_idx] = f"{k} {zone} {side}"
+            return grouped
+
+        # Define the categories you want to visualize
+        parameter_types = ["Avg Pressure", "Stiffness", "US Épaisseur ED", "US Épaisseur Hypoderme", "Total Tissue Thickness", "ROC"]
+
+        # Group row indices by type
+        grouped_params = group_parameters_by_type(target_rows, parameter_types)
+
+        # Generic plotter
+        def plot_combined_bar(data_dict, title, ylabel):
+            plot_data = []
+            for key, label in data_dict.items():
+                for zone in zones:
+                    for side_code, side_label in sides.items():
+                        if zone in label and side_label in label:
+                            try:
+                                vals = df.loc[key, 1:].astype(float)
+                                plot_data.append({
+                                    "Zone": zone,
+                                    "Side": side_label,
+                                    "Mean": vals.mean(),
+                                    "STD": vals.std()
+                                })
+                            except:
+                                pass
+
+            plot_df = pd.DataFrame(plot_data)
+
+            if plot_df.empty:
+                st.warning(f"No valid data found for {title}")
+                return
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            sns.barplot(data=plot_df, x="Zone", y="Mean", hue="Side", ax=ax,
+                        palette="coolwarm", capsize=0.1, errwidth=1)
+            ax.set_title(title)
+            ax.set_ylabel(ylabel)
+            ax.grid(True)
+            st.pyplot(fig)
+
+        # Plot each type
+        for ptype, row_dict in grouped_params.items():
+            plot_combined_bar(row_dict, f"{ptype} – Left vs Right Comparison", "Mean Value")
+              
     # ================================
     # 📌 Comparison of Left and Right Foot Parameters
     # ================================
@@ -1422,55 +1531,6 @@ if uploaded_file:
                     st.pyplot(fig)
 
     # ================================
-    # Morphological Bar Charts
-    # ================================
-    elif analysis_type == "Morphological Bar Charts":
-        st.subheader("📊 Morphological Parameters Bar Charts")
-
-        ep_derm_rows = {
-            126: "Epiderm+Derm SESA D", 127: "Epiderm+Derm HALLUX D", 128: "Epiderm+Derm TM5 D",
-            130: "Epiderm+Derm SESA G", 131: "Epiderm+Derm HALLUX G", 132: "Epiderm+Derm TM5 G"
-        }
-
-        hypo_rows = {
-            134: "Hypoderm SESA D", 135: "Hypoderm HALLUX D", 136: "Hypoderm TM5 D",
-            138: "Hypoderm SESA G", 139: "Hypoderm HALLUX G", 140: "Hypoderm TM5 G"
-        }
-
-        def plot_bar_parameter(data_dict, title, ylabel):
-            locations = ["HALLUX", "SESA", "TM5"]
-            sides = ["D", "G"]
-            mapped = {"D": "Right", "G": "Left"}
-
-            plot_data = []
-            for loc in locations:
-                for side in sides:
-                    for key, label in data_dict.items():
-                        if loc in label and side in label:
-                            vals = df.loc[key, 1:].astype(float)
-                            mean = vals.mean()
-                            std = vals.std()
-                            plot_data.append({
-                                "Location": loc,
-                                "Side": mapped[side],
-                                "Mean": mean,
-                                "STD": std
-                            })
-
-            plot_df = pd.DataFrame(plot_data)
-
-            fig, ax = plt.subplots(figsize=(8, 5))
-            sns.barplot(data=plot_df, x="Location", y="Mean", hue="Side", ax=ax, palette="coolwarm", capsize=0.1)
-            ax.set_title(title)
-            ax.set_ylabel(ylabel)
-            ax.grid(True)
-            st.pyplot(fig)
-
-        plot_bar_parameter(ep_derm_rows, "Combined Epidermis + Dermis Thickness", "Thickness (mm)")
-        plot_bar_parameter(hypo_rows, "Hypodermis Thickness", "Thickness (mm)")
-
-
-    # ================================
     # Bland-Altman Pooled Plots for all parameters
     # ================================
     elif analysis_type == "Bland-Altman Pooled Plots for all parameters":
@@ -1908,6 +1968,3 @@ if uploaded_file:
 # ================================
 else:
     st.info("Please upload an Excel file containing the 'DIAFOOT' sheet.")
-    
-    
-    
