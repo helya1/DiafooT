@@ -26,6 +26,7 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, adjusted_rand_score
 from sklearn.decomposition import PCA
 from scipy.stats import ttest_ind, mannwhitneyu, chi2_contingency, fisher_exact
+from sklearn.cluster import AgglomerativeClustering
 
 
 # ================================
@@ -46,8 +47,8 @@ if uploaded_file:
         "🧪 Choose Analysis Type:",
         ("Basic Analysis", "Descriptive Analysis", "Normality Tests",
         "Hallux/SESA/TM5 – L/R Comparison by Parameter Type", "Comparison of Left and Right Foot Parameters",
-        "IWGDF Risk Grade Summary & Clustering", "Grade  & Clustering", "Correlation Between Key Parameters", 
-        "Intra-Group Comparison","Bland-Altman Plots by Parameter and Side", 
+        "Clustering ignoring IWGDF Grade", "Clustering with IWGDF Grade Groups", "GMM Clustering","IWGDF Risk Grade Summary & Clustering", "Grade  & Clustering", "Correlation Between Key Parameters",
+        "Intra-Group Comparison","Bland-Altman Plots by Parameter and Side",
         "Bland-Altman Pooled Plots for all parameters",
         "Multivariate Group Comparison (MANOVA)", "Multiple Linear Regression", "Exploratory PCA")
     )
@@ -212,8 +213,6 @@ if uploaded_file:
         df = pd.read_excel(uploaded_file, header=None)
         df_combined = prepare_data(df)
 
-
-
     # ================================
     # 📌 Basic Analysis
     # ================================
@@ -357,7 +356,189 @@ if uploaded_file:
                 st.warning("⚠️ No valid Hba1c and insulin values found.")
         else:
             st.warning("⚠️ Hba1c or Insulin label not found.")
-            
+
+    # ================================
+    # 📌 Stat Summary Extractor
+    # ================================
+    elif analysis_type == "GMM Clustering":
+        st.subheader("🔍 GMM Clustering Based on Features Correlated with Grade")
+
+        from sklearn.mixture import GaussianMixture
+        from sklearn.metrics import adjusted_rand_score
+        from sklearn.decomposition import PCA
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.impute import SimpleImputer
+
+        # 🔹 Step 1: Locate risk grades row
+        label_risk = "Grade de risque IWGDF"
+        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
+        if row_risk.empty:
+            st.error(f"Label '{label_risk}' not found.")
+            st.stop()
+
+        idx_risk = row_risk.index[0]
+        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
+        expected_length = len(risk_values)
+
+        # 🔹 Step 2: Define features of interest (row indices)
+        target_rows = {
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L",
+            96: "ROM Ankle R", 97: "ROM Ankle L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            126: "US Épaisseur ED SESA D", 127: "US Épaisseur ED HALLUX D", 128: "US Épaisseur ED TM5 D",
+            130: "US Épaisseur ED SESA G", 131: "US Épaisseur ED HALLUX G", 132: "US Épaisseur ED TM5 G",
+            134: "US Épaisseur Hypoderme SESA D", 135: "US Épaisseur Hypoderme HALLUX D",
+            136: "US Épaisseur Hypoderme TM5 D", 138: "US Épaisseur Hypoderme SESA G",
+            139: "US Épaisseur Hypoderme HALLUX G", 140: "US Épaisseur Hypoderme TM5 G",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
+            19: "BMI", 24: "AOMI", 59: "Michigan Score", 72: "Charcot Sanders", 75: "ATCD Charcot Aigue D",
+            76: "ATCD Charcot Aigue G", 158: "Temperature Hallux D", 159: "Temperature 5th Toe D",
+            160: "Temperature Plantar Arch D", 161: "Temperature Lateral Sole D", 162: "Temperature Forefoot D",
+            163: "Temperature Heel D", 164: "Temperature Hallux G", 165: "Temperature 5th Toe G",
+            166: "Temperature Plantar Arch G", 167: "Temperature Lateral Sole G", 168: "Temperature Forefoot G",
+            169: "Temperature Heel G", 170: "Temperature Hand Mean D", 171: "Temperature Hand Mean G",
+        }
+
+        # 🔹 Step 3: Extract features + Impute missing
+        feature_dict = {}
+        invalid_rows = []
+
+        for idx, name in target_rows.items():
+            try:
+                values = pd.to_numeric(df.iloc[idx, 1:], errors='coerce').values
+                values = values[:expected_length]  # truncate to expected_length (20)
+                if np.count_nonzero(~np.isnan(values)) < expected_length:
+                    # Impute missing values with mean
+                    mean_val = np.nanmean(values)
+                    if np.isnan(mean_val):
+                        invalid_rows.append((idx, name, "All values are NaN"))
+                        continue
+                    imputed = np.where(np.isnan(values), mean_val, values)
+                    values = imputed
+                if len(values) != expected_length:
+                    invalid_rows.append((idx, name, f"Length after imputation: {len(values)}"))
+                    continue
+                feature_dict[name] = values
+            except Exception as e:
+                invalid_rows.append((idx, name, str(e)))
+
+        if not feature_dict:
+            st.error("❌ No valid features extracted. Check the data format.")
+            st.write("🛠️ Debug Info - Invalid/Mismatched rows:")
+            st.write(invalid_rows)
+            st.stop()
+
+        # Ensure all feature arrays are same length
+        lengths = [len(v) for v in feature_dict.values()]
+        if len(set(lengths)) != 1:
+            st.error("❌ Features have unequal lengths. Cannot construct DataFrame.")
+            st.write("🛠️ Feature lengths:", lengths)
+            st.stop()
+
+        df_features = pd.DataFrame(feature_dict)
+        df_features["Grade"] = risk_values.values[:expected_length]
+        df_features["Group"] = df_features["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
+
+        # 🔹 Step 4: Correlation with Grade
+        corr_with_grade = df_features.drop(columns=["Group"]).corr()["Grade"].drop("Grade")
+        top_features = corr_with_grade.abs().sort_values(ascending=False).head(6).index.tolist()
+
+        if not top_features:
+            st.error("❌ No top features correlated with grade.")
+            st.stop()
+
+        st.write("📌 Using top features:", ", ".join(top_features))
+
+        # 🔹 Step 5: GMM Clustering
+        X = df_features[top_features]
+        y_true = df_features["Grade"]
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        gmm = GaussianMixture(n_components=4, random_state=42)
+        clusters = gmm.fit_predict(X_scaled)
+        df_features["GMM_Cluster"] = clusters
+
+        # 🔹 Step 6: Contingency Table & Heatmap
+        cluster_vs_grade = pd.crosstab(df_features["Grade"], df_features["GMM_Cluster"])
+        st.write("### 🔁 Cluster vs True Grade (Contingency Table)")
+        st.dataframe(cluster_vs_grade)
+
+        fig_heatmap, ax = plt.subplots(figsize=(8, 6))
+        sns.heatmap(cluster_vs_grade, annot=True, fmt="d", cmap="Blues", ax=ax)
+        ax.set_title("GMM Clustering vs Grade")
+        ax.set_xlabel("GMM Cluster")
+        ax.set_ylabel("True Grade")
+        st.pyplot(fig_heatmap)
+
+
+
+        st.subheader("Interpretation of Contingency Table & Heatmap:")
+        st.markdown("""
+        - This heatmap visually represents the `pd.crosstab` contingency table, showing the counts of data points where a specific 'True Grade' corresponds to a specific 'GMM Cluster'.
+        - **Ideal Scenario:** In a perfect clustering, each 'True Grade' row would have a single high value in one 'GMM Cluster' column and zeros elsewhere, indicating a one-to-one mapping.
+        - **Observations from this Heatmap:**
+            - **True Grade 0 (Row 0):** Largely maps to **GMM Cluster 1** (high count), with very few (or none) in other clusters. This indicates a good association.
+            - **True Grade 1 (Row 1):** Appears to be predominantly assigned to **GMM Cluster 2**.
+            - **True Grade 2 (Row 2):** Also predominantly assigned to **GMM Cluster 2**. This suggests that GMM Cluster 2 might be merging True Grade 1 and True Grade 2, indicating that these two grades are not well-separated by the GMM, or they share similar characteristics in the feature space.
+            - **True Grade 3 (Row 3):** Is distributed across multiple GMM Clusters (e.g., GMM Cluster 0, GMM Cluster 2, GMM Cluster 3). This indicates that True Grade 3 is not cleanly separated into a single GMM cluster, suggesting a more complex or dispersed representation in the feature space for this grade.
+        - **In summary:** The heatmap provides a clear visual breakdown of how well the GMM clusters align with the actual grade labels. We can identify which true grades are well-captured by specific clusters and which are mixed or spread out.
+        """)
+        # 🔹 Step 7: Adjusted Rand Index (ARI)
+        ari = adjusted_rand_score(y_true, clusters)
+        st.metric("🧮 Adjusted Rand Index (ARI)", f"{ari:.3f}")
+
+
+        st.subheader("Interpretation of Adjusted Rand Index (ARI):")
+        st.markdown(f"""
+        - The Adjusted Rand Index (ARI) is a measure of the similarity between two data clusterings. In this case, it compares the GMM clustering with the 'True Grade' labels.
+        - **Range:** The ARI score ranges from -1 to 1.
+            - An ARI of **1.0** indicates perfect agreement between the clustering and the true labels (i.e., the clusters exactly match the true grades).
+            - An ARI of **0.0** indicates that the clustering is random, as good as chance.
+            - A negative ARI indicates that the clustering is worse than random.
+        - **Current ARI ({ari:.3f}):** Based on this value, we can quantitatively assess the quality of our GMM clustering.
+            - If the value is close to 1, the GMM has done a good job of identifying the inherent grade structure.
+            - If it's closer to 0, the clustering is not significantly better than random assignment.
+            - Our current ARI indicates a [**insert your specific interpretation based on the value, e.g., 'moderate to good agreement', 'weak agreement', etc.**]. For example, if it's 0.6, you might say "a moderate to good agreement between the GMM clusters and the true grades."
+        """)
+
+        # 🔹 Step 8: PCA Visualization
+        X_pca = PCA(n_components=2).fit_transform(X_scaled)
+        pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
+        pca_df["GMM_Cluster"] = clusters
+        pca_df["True Grade"] = y_true.values
+
+        fig_pca, ax_pca = plt.subplots(figsize=(8, 6))
+        sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue="GMM_Cluster", style="True Grade", palette="deep", ax=ax_pca)
+        ax_pca.set_title("PCA View: GMM Clusters vs True Grades")
+        st.pyplot(fig_pca)
+
+
+        st.subheader("Interpretation of PCA Visualization:")
+        st.markdown("""
+        - This scatter plot shows the data points projected onto the first two Principal Components (PC1 and PC2), which capture the most variance in the dataset.
+        - **Color (`hue='GMM_Cluster'`)**: Each data point is colored according to the GMM cluster it was assigned to. This shows the spatial grouping identified by the GMM.
+        - **Style (`style='True Grade'`)**: Each data point also has a unique marker style based on its actual 'True Grade'. This allows for a direct visual comparison between the GMM's clusters and the true underlying grades.
+        - **Observations from the plot:**
+            - **Spatial Separation of GMM Clusters:** We can observe how well the GMM algorithm has separated the data points into distinct regions in the 2D PCA space. Ideally, points of the same color (GMM cluster) would be tightly grouped.
+            - **Alignment with True Grades:** By looking at both color and style, we can see:
+                - **Well-separated Grades:** If a GMM cluster (a specific color) predominantly contains points of a single true grade style, it indicates good separation. For example, if **GMM Cluster 1 (orange circles)** primarily aligns with **True Grade 0 (black dots)**, it's a good match.
+                - **Mixed Grades:** If a GMM cluster contains points with various true grade styles, it suggests that the GMM is mixing those grades. For example, if **GMM Cluster 2 (green squares)** shows both **True Grade 1 (black x)** and **True Grade 2 (black square)**, it confirms the merging observed in the heatmap.
+                - **Spread Grades:** If points of a single true grade style are spread across multiple GMM clusters, it suggests that the GMM couldn't form a single, cohesive cluster for that grade. This is evident if **True Grade 3 (plus signs)** are found within multiple GMM clusters (e.g., blue, red).
+        - **In summary:** The PCA plot provides a valuable visual complement to the quantitative metrics and contingency table. It helps us understand *why* the ARI score is what it is, by showing the geometric relationships between the clustered data and their true labels.
+        """)
+        
     # ================================
     # 📌 Stat Summary Extractor
     # ================================
@@ -902,20 +1083,20 @@ if uploaded_file:
 
         # 🎨 Step 6: Plot clustering colored by group
         fig, ax = plt.subplots(figsize=(10, 5))
-        sc = ax.scatter(results["Patient"], results["IWGDF_Grade"], c=results["Cluster"], cmap="Set1", s=100, edgecolor='k')
+        sc = ax.scatter(results["Patient"], results["IWGDF_Grade"], cmap="jet", edgecolor='k')
         ax.set_xlabel("Patient ID")
         ax.set_ylabel("IWGDF Grade")
         ax.set_title("Clustering Colored by Cluster")
-        plt.colorbar(sc, label="Cluster")
+        # Set x-axis ticks from 1 to 20
+        ax.set_xticks(np.arange(1, 21, 1))
+        # Set y-axis ticks at 0, 1, 2, 3
+        ax.set_yticks(np.arange(0, 4, 1)) 
+
         st.pyplot(fig)
 
         st.markdown("ℹ️ **Chart Interpretation**")
         st.info("""
-        This plot compares actual **IWGDF grades** (Y-axis) to **clustering results** (colors).
         - Each dot represents a patient.
-        - Patients with similar risk grades should ideally fall into the same cluster (same color).
-        - If colors are mixed at the same grade level, it suggests clustering doesn’t fully match medical grading.
-        - If color separation aligns with grade steps, clustering may reflect real clinical distinctions.
         """)
 
         # ============================
@@ -925,12 +1106,6 @@ if uploaded_file:
             st.markdown(f"#### {name}")
             st.write(f"Group sizes: {len(group1_idx)} vs {len(group2_idx)}")
 
-            st.markdown(f"ℹ️ **Interpretation`**")
-            st.info(f"""
-            - The **violin plot** highlights the distribution shape (spread, skewness, multimodality).
-            - The **histogram with KDE** reveals density overlap and shift.
-            - A strong difference between the two curves (and minimal overlap) means the feature is potentially important for distinguishing the groups.
-            """)
                     
             # 📉 Not enough patients → Show only group means
             if len(group1_idx) < min_samples or len(group2_idx) < min_samples:
@@ -971,25 +1146,6 @@ if uploaded_file:
                     df = df.sort_values("Effect Size", ascending=False)
                     st.dataframe(df)
 
-                    # 📊 Visualize top 5 significant features
-                    st.markdown("### 📊 Visualization of Selected Parameters")
-                    for feat in df["Feature"].head(5):
-                        combined = pd.concat([
-                            features_df.loc[group1_idx, [feat]].assign(Group="Group 1"),
-                            features_df.loc[group2_idx, [feat]].assign(Group="Group 2")
-                        ])
-                        combined.columns = ["Value", "Group"]
-
-                        fig1, ax1 = plt.subplots()
-                        sns.violinplot(data=combined, x="Group", y="Value", inner="box", ax=ax1)
-                        ax1.set_title(f"Violin Plot: {feat}")
-                        st.pyplot(fig1)
-
-                        fig2, ax2 = plt.subplots()
-                        sns.histplot(data=combined, x="Value", hue="Group", kde=True, element="step", stat="density", common_norm=False)
-                        ax2.set_title(f"Histogram: {feat}")
-                        st.pyplot(fig2)
-
                     return df
 
 
@@ -1005,9 +1161,17 @@ if uploaded_file:
 
         # 📊 Step 8: Compare clusters directly
         st.markdown("### 🔍 Parameter Differences Between Clusters")
-        c0 = results[results["Cluster"] == 0].index
-        c1 = results[results["Cluster"] == 1].index
-        df_cluster_diff = compare_groups_safely("Cluster 0 vs Cluster 1", c0, c1, features_df)
+
+        cluster0_idx = results[results["IWGDF_Grade"].isin([0, 1])].index
+        cluster1_idx = results[results["IWGDF_Grade"].isin([2, 3])].index
+
+        df_cluster_comparison = compare_groups_safely(
+            "Cluster 0 (Grades 0–1) vs Cluster 1 (Grades 2–3)",
+            cluster0_idx,
+            cluster1_idx,
+            features_df
+        )
+
 
         # 💾 Step 9: Export all analysis results to Excel
         output_file = "IWGDF_transition_results.xlsx"
@@ -1021,6 +1185,177 @@ if uploaded_file:
         with open(output_file, "rb") as f:
             st.download_button("📅 Download Transition Results", f, file_name=output_file)
 
+
+
+    # ================================
+    # Clustering ignoring IWGDF Grade
+    # ================================
+    elif analysis_type == "Clustering ignoring IWGDF Grade":
+        st.header("Unsupervised Clustering ignoring IWGDF Grade")
+
+        # Transpose: features as rows, patients as columns
+        data = df_combined.drop(columns=["Grade", "Group"], errors="ignore").T
+
+        # Drop features (rows) with >50% missing values (i.e., not enough patient data)
+        threshold = data.shape[1] * 0.5
+        data = data.loc[data.isnull().sum(axis=1) < threshold]
+
+        # Impute missing values with row-wise median
+        data = data.apply(lambda row: row.fillna(row.median()), axis=1)
+
+        # Keep only features (rows) with at least 20 valid patient values
+        data = data.loc[data.count(axis=1) >= 20]
+
+        # Transpose back for clustering (patients = rows, features = columns)
+        features = data.T
+
+        st.write(f"Remaining features after cleaning ({features.shape[1]} features):")
+        st.write(list(features.columns))
+
+        if features.shape[1] == 0 or features.shape[0] < 2:
+            st.error("Not enough valid data for clustering after cleaning.")
+        else:
+            # Standardize
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(features)
+
+            # Agglomerative Clustering
+            k = st.slider("Select number of clusters", 2, 6, 3)
+            linkage_method = st.selectbox("Linkage method", ["ward", "complete", "average", "single"])
+
+            # 'ward' requires Euclidean distances
+            if linkage_method == "ward" and X_scaled.shape[1] < 2:
+                st.warning("Ward linkage requires at least 2 features. Please adjust filtering.")
+            else:
+                clustering = AgglomerativeClustering(n_clusters=k, linkage=linkage_method)
+                cluster_labels = clustering.fit_predict(X_scaled)
+
+                df_combined["Cluster_without_Grade"] = cluster_labels
+
+                st.write("Cluster assignments (first 10 patients):")
+                st.dataframe(df_combined[["Cluster_without_Grade", "Grade"]].head(10))
+
+                # PCA for 2D visualization
+                pca = PCA(n_components=2)
+                components = pca.fit_transform(X_scaled)
+                df_combined["PCA1"] = components[:, 0]
+                df_combined["PCA2"] = components[:, 1]
+
+                fig, ax = plt.subplots()
+                sns.scatterplot(data=df_combined, x="PCA1", y="PCA2", hue="Cluster_without_Grade", palette="Set2", ax=ax)
+                ax.set_title(f"PCA plot colored by Agglomerative Clustering ({linkage_method})")
+                st.pyplot(fig)
+
+    # ================================
+    # Clustering with IWGDF Grade Groups
+    # ================================
+    elif analysis_type == "Clustering with IWGDF Grade Groups":
+        st.header("Clustering with IWGDF Grade Groups (Agglomerative Clustering)")
+
+        risk_row = df.iloc[16]
+        risk_label = risk_row[0]
+        if str(risk_label).strip().lower() != "grade de risque iwgdf":
+            st.error("Row 16 does not contain 'Grade de risque IWGDF' label.")
+            st.stop()
+            
+        risk_values = pd.to_numeric(risk_row[1:], errors='coerce').dropna().astype(int)
+        patient_ids = risk_values.index.tolist()
+
+        selected_features = df.drop(index=["Grade de risque IWGDF"], errors='ignore')
+        selected_features = selected_features.loc[:, patient_ids]
+
+        features_df = selected_features.T.apply(pd.to_numeric, errors='coerce')  # ترنسپوز: ردیف‌ها بیماران
+
+        features_df["Grade de risque IWGDF"] = risk_values.reindex(features_df.index)
+
+        df_A = features_df[features_df["Grade de risque IWGDF"].isin([0, 1])]
+        df_B = features_df[features_df["Grade de risque IWGDF"].isin([2, 3])]
+
+        def run_clustering(df_group, group_name):
+            st.subheader(f"Group {group_name} (n={df_group.shape[0]})")
+
+            if df_group.shape[0] < 2:
+                st.warning("Not enough patients in this group.")
+                return None 
+
+            data = df_group.drop(columns=["Grade", "Group", "Grade de risque IWGDF"], errors="ignore").T
+            
+            # Drop features (rows) with >50% missing values (i.e., not enough patient data)
+            threshold = data.shape[1] * 0.5
+            
+            data = data.loc[data.isnull().sum(axis=1) < threshold]
+            
+            # Impute missing values with row-wise median
+            data = data.apply(lambda row: row.fillna(row.median()), axis=1)
+            
+            # Keep only features (rows) with at least 20 valid patient values
+            data = data.loc[data.count(axis=1) >= 20]
+
+            features = data.T
+
+            st.write(f"Remaining features for clustering ({features.shape[1]} features):")
+            st.write(list(features.columns))
+
+            if features.shape[1] == 0:
+                st.error("No usable features after cleaning.")
+                return None
+
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(features)
+
+            k = st.slider(f"Number of clusters for Group {group_name}", 2, 6, 3, key=f"k_{group_name}")
+            linkage_method = st.selectbox(f"Linkage method for Group {group_name}",
+                                        ["ward", "complete", "average", "single"], key=f"linkage_{group_name}")
+
+            if linkage_method == "ward" and X_scaled.shape[1] < 2:
+                st.warning("Ward linkage requires at least 2 features.")
+                return None
+
+            clustering = AgglomerativeClustering(n_clusters=k, linkage=linkage_method)
+            cluster_labels = clustering.fit_predict(X_scaled)
+
+            df_group = df_group.copy()
+            df_group["Cluster"] = cluster_labels
+
+            st.write(df_group[["Cluster", "Grade de risque IWGDF"]].head(10))
+
+            pca = PCA(n_components=2)
+            components = pca.fit_transform(X_scaled)
+            df_group["PCA1"] = components[:, 0]
+            df_group["PCA2"] = components[:, 1]
+
+            fig, ax = plt.subplots()
+            sns.scatterplot(data=df_group, x="PCA1", y="PCA2", hue="Cluster", palette="Set2", ax=ax)
+            ax.set_title(f"PCA projection – Group {group_name}")
+            st.pyplot(fig)
+
+            return df_group
+
+        df_A_result = run_clustering(df_A, "A (Grade 0–1)")
+        df_B_result = run_clustering(df_B, "B (Grade 2–3)")
+
+        # Combine results for comparison
+        df_combined["Cluster_with_Grade"] = np.nan
+
+        if df_A_result is not None:
+            df_combined.loc[df_A_result.index, "Cluster_with_Grade"] = df_A_result["Cluster"]
+        if df_B_result is not None:
+            df_combined.loc[df_B_result.index, "Cluster_with_Grade"] = df_B_result["Cluster"]
+
+        if "Cluster_without_Grade" in df_combined.columns and df_combined["Cluster_with_Grade"].notna().sum() > 1:
+            common = df_combined.dropna(subset=["Cluster_without_Grade", "Cluster_with_Grade"])
+            if len(common) > 1:
+                ari = adjusted_rand_score(common["Cluster_without_Grade"], common["Cluster_with_Grade"])
+                st.write(f"### Adjusted Rand Index (ARI) between clusterings:")
+                st.write(f"ARI = {ari:.3f}")
+
+                contingency = pd.crosstab(common["Cluster_without_Grade"], common["Cluster_with_Grade"])
+                st.write("### Contingency Table (Cluster_without_Grade vs Cluster_with_Grade):")
+                st.dataframe(contingency)
+            else:
+                st.warning("Not enough patients with both cluster labels to compare.")
+        else:
+            st.warning("Cluster labels missing for comparison.")
 
     # ================================
     # Grade  & Clustering
