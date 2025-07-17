@@ -46,7 +46,7 @@ if uploaded_file:
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
         ("Basic Analysis", "Descriptive Analysis", "Normality Tests",
-        "Hallux/SESA/TM5 – L/R Comparison by Parameter Type", "Comparison of Left and Right Foot Parameters",
+        "Hallux/SESA/TM5 – L/R Comparison by Parameter Type", "Comparison of Left and Right Foot Parameters", "Statistical Tests Between Grades",
         "Clustering ignoring IWGDF Grade", "Clustering with IWGDF Grade Groups", "GMM Clustering","IWGDF Risk Grade Summary & Clustering", "Grade  & Clustering", "Correlation Between Key Parameters",
         "Intra-Group Comparison","Bland-Altman Plots by Parameter and Side",
         "Bland-Altman Pooled Plots for all parameters",
@@ -1000,6 +1000,116 @@ if uploaded_file:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+
+    # ================================
+    # Statistical Tests Between Grades
+    # ================================
+        elif analysis_type == "Statistical Tests Between Grades":
+        st.header("1. Statistical Tests Between Successive Grades")
+
+        param_cols = [c for c in df_combined.columns if c not in ["Grade", "Group", "Cluster", "PCA1", "PCA2"]]
+        st.write("Parameters to test:", param_cols)
+
+        grade_pairs = [(0, 1), (1, 2), (2, 3)]
+        st.write(f"Testing grade transitions: {grade_pairs}")
+
+        for g in [0, 1, 2, 3]:
+            count = (df_combined["Grade"] == g).sum()
+            st.write(f"Number of samples in Grade {g}: {count}")
+
+        results = []
+        min_samples = 2  
+
+        for param in param_cols:
+            for g1, g2 in grade_pairs:
+                group1 = df_combined[df_combined["Grade"] == g1][param].dropna()
+                group2 = df_combined[df_combined["Grade"] == g2][param].dropna()
+
+                if len(group1) >= min_samples and len(group2) >= min_samples:
+                    # Normality check
+                    try:
+                        _, p1 = shapiro(group1)
+                        _, p2 = shapiro(group2)
+                        normal = (p1 > 0.05) and (p2 > 0.05)
+                    except Exception as e:
+                        normal = False
+
+                    if normal:
+                        stat, pval = ttest_ind(group1, group2)
+                        test_name = "t-test"
+                    else:
+                        stat, pval = mannwhitneyu(group1, group2)
+                        test_name = "Mann-Whitney U"
+
+                    results.append({
+                        "Parameter": param,
+                        "Grade 1": g1,
+                        "Grade 2": g2,
+                        "Test": test_name,
+                        "p-value": pval,
+                        "Significant": pval < 0.05,
+                        "Mean Grade 1": group1.mean(),
+                        "Mean Grade 2": group2.mean()
+                    })
+
+        if len(results) == 0:
+            st.warning(f"No statistical tests were performed because no groups had at least {min_samples} samples each.")
+        else:
+            df_results = pd.DataFrame(results)
+            st.write("Statistical test results sorted by p-value:")
+            st.dataframe(df_results.sort_values("p-value"))
+
+
+        st.header("2. Statistical Tests Between Combined Grades")
+
+        param_cols = [c for c in df_combined.columns if c not in ["Grade", "Group", "Cluster", "PCA1", "PCA2"]]
+
+        df_combined['Grade_combined'] = df_combined['Grade'].apply(lambda x: 'A (0-1)' if x in [0, 1] else ('B (2-3)' if x in [2, 3] else np.nan))
+
+        for group_label in ['A (0-1)', 'B (2-3)']:
+            count = (df_combined["Grade_combined"] == group_label).sum()
+            st.write(f"Number of samples in Group {group_label}: {count}")
+
+        results = []
+        min_samples = 2  
+
+        for param in param_cols:
+            groupA = df_combined[df_combined["Grade_combined"] == 'A (0-1)'][param].dropna()
+            groupB = df_combined[df_combined["Grade_combined"] == 'B (2-3)'][param].dropna()
+
+            if len(groupA) >= min_samples and len(groupB) >= min_samples:
+                # Normality check
+                try:
+                    _, p1 = shapiro(groupA)
+                    _, p2 = shapiro(groupB)
+                    normal = (p1 > 0.05) and (p2 > 0.05)
+                except Exception:
+                    normal = False
+
+                if normal:
+                    stat, pval = ttest_ind(groupA, groupB)
+                    test_name = "t-test"
+                else:
+                    stat, pval = mannwhitneyu(groupA, groupB)
+                    test_name = "Mann-Whitney U"
+
+                results.append({
+                    "Parameter": param,
+                    "Group 1": "A (0-1)",
+                    "Group 2": "B (2-3)",
+                    "Test": test_name,
+                    "p-value": pval,
+                    "Significant": pval < 0.05,
+                    "Mean Group 1": groupA.mean(),
+                    "Mean Group 2": groupB.mean()
+                })
+
+        if len(results) == 0:
+            st.warning(f"No statistical tests were performed because no groups had at least {min_samples} samples each.")
+        else:
+            df_results = pd.DataFrame(results)
+            st.write("Statistical test results sorted by p-value:")
+            st.dataframe(df_results.sort_values("p-value"))
     # ================================
     # 📌 IWGDF Risk Grade Summary & KMeans Clustering
     # ================================
