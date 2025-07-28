@@ -1,34 +1,48 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from scipy.stats import ttest_ind
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, adjusted_rand_score
-from sklearn.decomposition import PCA
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.stats import ttest_rel, wilcoxon, shapiro
+# Core Python Libraries
 from datetime import datetime
 import io
+import re
 from io import BytesIO
-from scipy.stats import mannwhitneyu
+
+# Data Handling
+import pandas as pd
+import numpy as np
+
+# Visualization
+import matplotlib.pyplot as plt
+import seaborn as sns
 from matplotlib import cm
-cm.get_cmap("coolwarm")
-from statsmodels.multivariate.manova import MANOVA
+
+# Statistical Analysis
+from scipy.stats import (
+    ttest_ind, ttest_rel, wilcoxon, shapiro,
+    mannwhitneyu, chi2_contingency, fisher_exact
+)
 import statsmodels.api as sm
-from sklearn.impute import SimpleImputer
-from scipy.stats import chi2_contingency
-from scipy.stats import fisher_exact
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, adjusted_rand_score
+from statsmodels.multivariate.manova import MANOVA
+from sklearn.linear_model import LogisticRegression
+from scipy.stats import f_oneway
+
+# Machine Learning & Clustering
+from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.mixture import GaussianMixture
 from sklearn.decomposition import PCA
-from scipy.stats import ttest_ind, mannwhitneyu, chi2_contingency, fisher_exact
-from sklearn.cluster import AgglomerativeClustering
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (
+    silhouette_score, adjusted_rand_score, normalized_mutual_info_score,
+    calinski_harabasz_score, davies_bouldin_score,
+    confusion_matrix, ConfusionMatrixDisplay
+)
+from sklearn.preprocessing import StandardScaler
+
+# Web App
+import streamlit as st
 
 
+from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
+from sklearn.ensemble import RandomForestClassifier
 # ================================
 # 🌐 Streamlit Page Setup
 # ================================
@@ -38,28 +52,45 @@ st.title("📊 DIAFOOT Analysis Dashboard")
 # ================================
 # 📤 File Upload
 # ================================
-uploaded_file = st.file_uploader("Upload Excel file with 'DIAFOOT' sheet", type=["xlsx"])
+uploaded_file = st.file_uploader("📁 Upload Excel file with 'DIAFOOT' sheet", type=["xlsx"])
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file, sheet_name="DIAFOOT", header=None)
 
+    # 🔍 Analysis Type Selection
     analysis_type = st.sidebar.radio(
         "🧪 Choose Analysis Type:",
-        ("Basic Analysis", "Descriptive Analysis", "Normality Tests",
-        "Hallux/SESA/TM5 – L/R Comparison by Parameter Type", "Comparison of Left and Right Foot Parameters",
-        "Clustering ignoring IWGDF Grade", "Clustering with IWGDF Grade Groups", "GMM Clustering","IWGDF Risk Grade Summary & Clustering", "Grade  & Clustering", "Correlation Between Key Parameters",
-        "Intra-Group Comparison","Bland-Altman Plots by Parameter and Side",
-        "Bland-Altman Pooled Plots for all parameters",
-        "Multivariate Group Comparison (MANOVA)", "Multiple Linear Regression", "Exploratory PCA")
+        (
+            "Basic Analysis",
+            "Descriptive Analysis",
+            "Normality Tests",
+            "L/R Comparison by Anatomical Zone",
+            "Comparison of Left and Right Foot Parameters",
+            "Diabetic vs Control",            
+            "IWGDF Risk Grade Summary & Clustering",
+            "Clustering (Important Parameters)",
+            "Clustering (All Parameters)",
+            "Correlation Between Key Parameters",
+            "Bland-Altman Plots by Parameter and Side",
+            "Bland-Altman Pooled Plots for all parameters",
+        )
     )
 
+    # Target Rows for General Analysis
     target_rows = {
-        6: "Date of Birth", 16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
-        35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-        59: "Michigan Score (ok=13, risk=0)", 72: "Michigan Score2 (ok=13, risk=0)",
+        6: "Date of Birth",
+        16: "Grade IWGDF",
+        17: "Height (m)", 18: "Weight (kg)", 19: "BMI",
+        24: "AOMI",
+        35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+        37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+        59: "Michigan Score (ok=13, risk=0)",
+        72: "Michigan Score2 (ok=13, risk=0)",
         75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
         77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-        94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
+        94: "Amplitude of dorsiflexion of right MTP1 R",
+        95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+        97: "Amplitude talo-crurale L",
         108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
         113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
         118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -70,7 +101,8 @@ if uploaded_file:
         138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
         142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
         146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-        150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+        150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+        154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
         158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
         161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
         164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
@@ -79,36 +111,10 @@ if uploaded_file:
         172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
         174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
         176: "Normalized Temperature R", 177: "Normalized Temperature L",
-        212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
+        212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L",
+        214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
     }
-    
-    target_rows_reg = {
-        16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI",
-        35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-        75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
-        77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-        94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
-        108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
-        113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
-        118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
-        122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-        126: "US Thickness ED SESA R", 127: "US Thickness ED HALLUX R", 128: "US Thickness ED TM5 R",
-        130: "US Thickness ED SESA L", 131: "US Thickness ED HALLUX L", 132: "US Thickness ED TM5 L",
-        134: "US Thickness Hypodermis SESA R", 135: "US Thickness Hypodermis HALLUX R", 136: "US Thickness Hypodermis TM5 R",
-        138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
-        142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
-        146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-        150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-        158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
-        161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
-        164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
-        167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L", 169: "Temperature Heel L",
-        170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
-        172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
-        174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
-        176: "Normalized Temperature R", 177: "Normalized Temperature L",
-        212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
-    }
+
     # ================================
     # 🧹 Data Preparation Function
     # ================================
@@ -117,29 +123,38 @@ if uploaded_file:
 
     def data_reg(df_num, row_labels):
         target_rows = {
-            35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            6: "Date de naissance", 16:"Grade IWGDF", 19: "BMI",
+            24: "AOMI", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            59: "Michigan Score(ok=13, risque=0)", 72: "Michigan Score2(ok=13, risque=0)", 
+            75: "Medical history of acute Charcot R",76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
-            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
-            113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
             122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-            126: "US Thickness ED SESA R", 127: "US Thickness ED HALLUX R", 128: "US Thickness ED TM5 R",
-            130: "US Thickness ED SESA L", 131: "US Thickness ED HALLUX L", 132: "US Thickness ED TM5 L",
-            134: "US Thickness Hypodermis SESA R", 135: "US Thickness Hypodermis HALLUX R", 136: "US Thickness Hypodermis TM5 R",
-            138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
-            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
-            146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-            158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
-            161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
-            164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
-            167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L", 169: "Temperature Heel L",
-            170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
-            172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
-            174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L"
+            126: "US Épaisseur ED SESA R", 127: "US Épaisseur ED HALLUX R", 128: "US Épaisseur ED TM5 R",
+            130: "US Épaisseur ED SESA L", 131: "US Épaisseur ED HALLUX L", 132: "US Épaisseur ED TM5 L",
+            134: "US Épaisseur Hypoderme SESA R", 135: "US Épaisseur Hypoderme HALLUX R",
+            136: "US Épaisseur Hypoderme TM5 R", 138: "US Épaisseur Hypoderme SESA L",
+            139: "US Épaisseur Hypoderme HALLUX L", 140: "US Épaisseur Hypoderme TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",            
+            158: "Temperature Hallux R", 159: "Temperature 5th Toe R",
+            160: "Temperature Plantar Arch R", 161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R",
+            163: "Temperature Heel R", 164: "Temperature Hallux L", 165: "Temperature 5th Toe L",
+            166: "Temperature Plantar Arch L", 167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L",
+            169: "Temperature Heel L", 170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
+            172: "Average IR Temperature Foot R (Celsius)",173: "Average IR Temperature Foot L (Celsius)",
+            174: "Temperature Difference Hand-Foot R",175: "Temperature Difference Hand-Foot L",176: "Normalized Temperature R",
+            177: "Normalized Temperature L", 212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R",
+            215: "SUDOSCAN Foot L",
         }
-        # Possibly add any processing you want here, for now just return inputs as is
         return df_num, target_rows
 
     # Call the function with the correct variables
@@ -159,7 +174,9 @@ if uploaded_file:
             59: "Michigan Score (ok=13, risk=0)", 72: "Michigan Score2 (ok=13, risk=0)",
             75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L",
             108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
             113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -217,43 +234,67 @@ if uploaded_file:
     # 📌 Basic Analysis
     # ================================
     if analysis_type == "Basic Analysis":
-        st.header("📋 Basic Descriptive Analysis")
-
-        # ==========================
-        # 🎂 Age Distribution
-        # ==========================
+        st.header("📋 Basic Analysis")
+        target_rows = {
+            6: "Date of Birth", 16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
+            35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            59: "Michigan Score (ok=13, risk=0)", 72: "Michigan Score2 (ok=13, risk=0)",
+            75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
+            77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
+            113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            126: "US Thickness ED SESA R", 127: "US Thickness ED HALLUX R", 128: "US Thickness ED TM5 R",
+            130: "US Thickness ED SESA L", 131: "US Thickness ED HALLUX L", 132: "US Thickness ED TM5 L",
+            134: "US Thickness Hypodermis SESA R", 135: "US Thickness Hypodermis HALLUX R", 136: "US Thickness Hypodermis TM5 R",
+            138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
+            146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
+            161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
+            164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
+            167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L", 169: "Temperature Heel L",
+            170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
+            172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
+            174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
+            176: "Normalized Temperature R", 177: "Normalized Temperature L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
+        }
+        
+        # -------- 🎂 Age Distribution --------
+        
+        st.subheader("🎂 Age Distribution")
         dob_row = df.iloc[6, 1:].dropna().astype(str).str.strip()
 
-        # Try to parse dates with flexible day-first format
-        dob_dates = pd.to_datetime(dob_row, dayfirst=True, errors='coerce')
-
         # Calculate age from today
+        dob_dates = pd.to_datetime(dob_row, dayfirst=True, errors='coerce')
         today = pd.Timestamp.today()
         ages = dob_dates.map(lambda d: (today - d).days / 365.25 if pd.notnull(d) else np.nan).dropna()
 
         if ages.empty:
             st.warning("⚠️ No valid date of birth data found.")
         else:
-            # Stats
             average_age = ages.mean()
-            std_age = ages.std()
-
-            st.subheader("🎂 Age Distribution")
+            std_age = ages.std()   
             st.write(f"**Average Age**: {average_age:.1f} years")
             st.write(f"**Standard Deviation**: {std_age:.1f}")
-
-            # Plot
             fig, ax = plt.subplots(figsize=(8, 5))
             ax.hist(ages, bins=10, color='skyblue', edgecolor='black')
             ax.axvline(average_age, color='red', linestyle='dashed', linewidth=1, label=f'Mean: {average_age:.1f}')
             ax.set_title("Patient Age Distribution")
             ax.set_xlabel("Age (years)")
             ax.set_ylabel("Count")
+            ax.grid(True, linestyle='--', alpha=0.5)
             ax.legend()
             st.pyplot(fig)
 
+        # -------- 🚻 Gender Distribution --------
 
-        # GENDER DISTRIBUTION
         st.subheader("🚻 Gender Distribution")
         gender_row = df[df[0].astype(str).str.strip().str.lower() == "genre h/f/i"]
         if not gender_row.empty:
@@ -263,15 +304,30 @@ if uploaded_file:
             counts = gender_vals.value_counts()
             valid_counts = counts[counts.index.isin(gender_map.keys())]
             valid_counts.index = valid_counts.index.map(gender_map)
+            total_patients = valid_counts.sum()
+            percentages = (valid_counts / total_patients * 100).round(1)
             fig_gender, ax_gender = plt.subplots()
-            ax_gender.pie(valid_counts, labels=valid_counts.index, autopct='%1.1f%%', 
-                        startangle=140, colors=['lightblue', 'lightpink', 'gray'])
+            ax_gender.pie(
+                valid_counts,
+                labels=[f"{label} ({count})" for label, count in zip(valid_counts.index, valid_counts)],
+                autopct='%1.1f%%',
+                startangle=140,
+                colors=['lightblue', 'lightpink', 'gray']
+            )
             ax_gender.axis('equal')
             st.pyplot(fig_gender)
+            st.info(f"👥 Total patients with valid gender data: **{total_patients}**")
+            gender_percent_text = "\n".join(
+                [f"- {label}: {count} patients ({percent}%)" for label, count, percent in zip(valid_counts.index, valid_counts, percentages)]
+            )
+            st.markdown(f"**Gender Breakdown:**\n{gender_percent_text}")
+
         else:
             st.warning("⚠️ Gender row ('Genre H/F/I') not found.")
 
-        # BMI ANALYSIS
+
+        # -------- ⚖️ BMI Distribution --------
+        
         st.subheader("⚖️ BMI Distribution")
         bmi_row = df[df[0].astype(str).str.strip().str.lower() == "bmi (poids[kg] / taille[m]2)"]
         if not bmi_row.empty:
@@ -280,270 +336,132 @@ if uploaded_file:
                 stats = bmi_vals.describe().round(2)
                 st.write("**BMI Summary Statistics:**")
                 st.dataframe(stats)
-                fig_bmi, ax_bmi = plt.subplots()
-                sns.histplot(bmi_vals, kde=True, ax=ax_bmi, color="lightgreen")
-                ax_bmi.set_title("BMI Distribution")
+
+                # BMI Histogram
+                fig_bmi, ax_bmi = plt.subplots(figsize=(6, 4))
+                sns.histplot(bmi_vals, kde=True, ax=ax_bmi, color="mediumseagreen", edgecolor="black", bins=20)
+                ax_bmi.set_title("BMI Distribution", fontsize=14)
+                ax_bmi.set_xlabel("BMI", fontsize=12)
+                ax_bmi.set_ylabel("Frequency", fontsize=12)
+                ax_bmi.set_yticks([0, 1, 2])
+                ax_bmi.grid(True, linestyle='--', alpha=0.5)
                 st.pyplot(fig_bmi)
             else:
                 st.warning("⚠️ No valid BMI values.")
         else:
             st.warning("⚠️ BMI label not found.")
 
-        # IWGDF GRADE ANALYSIS
-        st.subheader("🦶 IWGDF Risk Grade Summary")
+        # -------- IWGDF Risk Grade Summary --------
+
+        st.subheader("IWGDF Risk Grade Summary")
         grade_row = df[df[0].astype(str).str.strip().str.lower() == "grade de risque iwgdf"]
+        st.markdown("""
+        The **IWGDF (International Working Group on the Diabetic Foot)** risk grading system classifies diabetic patients based on their risk of developing foot ulcers. The grades are:
+
+        - **Grade 0 Low risk (no neuropathy)**: No loss of protective sensation (LOPS), no peripheral artery disease (PAD).
+        - **Grade 1 Moderate risk (neuropathy only)**: LOPS or PAD without deformity or history of ulcer.
+        - **Grade 2 High risk (neuropathy + deformity or PAD)**: LOPS or PAD with foot deformity or prior history of ulcer.
+        - **Grade 3 Very high risk (history of ulcer or amputation)**: LOPS or PAD with active ulcer, history of amputation, or both.
+
+        This classification helps target prevention strategies and follow-up frequency.
+        """)
         if not grade_row.empty:
             grades = pd.to_numeric(df.loc[grade_row.index[0], 1:], errors='coerce').dropna().astype(int)
             grade_counts = pd.Series([0, 1, 2, 3]).map(lambda g: (grades == g).sum())
+            
             risk_labels = ["Low", "Moderate", "High", "Very High"]
-            fig_grade, ax_grade = plt.subplots()
-            bars = ax_grade.bar(range(4), grade_counts, color="cornflowerblue")
+            palette = sns.color_palette("Blues", 4)
+
+            fig_grade, ax_grade = plt.subplots(figsize=(7, 4))
+            bars = ax_grade.bar(range(4), grade_counts, color=palette, edgecolor='black', width=0.6)
+
+            # Customize axes and background
             ax_grade.set_xticks(range(4))
-            ax_grade.set_xticklabels(risk_labels)
-            ax_grade.set_ylabel("Number of Patients")
-            ax_grade.set_title("IWGDF Risk Grade Frequency")
+            ax_grade.set_xticklabels(risk_labels, fontsize=11)
+            ax_grade.set_ylabel("Number of Patients", fontsize=12)
+            ax_grade.set_title("IWGDF Risk Grade Distribution", fontsize=13, weight='bold')
+
+            # Remove top/right spines for a cleaner look
+            ax_grade.spines['top'].set_visible(False)
+            ax_grade.spines['right'].set_visible(False)
+            ax_grade.grid(axis='y', linestyle='--', alpha=0.5)
+
+            # Add value labels on top of bars
             for i, b in enumerate(bars):
-                ax_grade.text(b.get_x() + b.get_width()/2, b.get_height() + 0.2,
-                            str(int(grade_counts[i])), ha='center', fontsize=10)
+                ax_grade.text(
+                    b.get_x() + b.get_width()/2,
+                    b.get_height() + 0.3,
+                    str(int(grade_counts[i])),
+                    ha='center',
+                    va='bottom',
+                    fontsize=11,
+                    fontweight='semibold'
+                )
+
             st.pyplot(fig_grade)
+
         else:
             st.warning("⚠️ IWGDF grade row not found.")
+    
+    
+        # -------- Age of Diabetes by Type --------
 
-        # DIABETES AGE BY TYPE
         st.subheader("🩸 Age of Diabetes by Type")
+        st.markdown("""
+        This chart shows the **age at diagnosis** (i.e., "age of diabetes") across different **types of diabetes**:
+        - 🟦 **Type 1**: Autoimmune, usually early onset
+        - 🟨 **Type 2**: Metabolic, typically later onset
+        - 🟥 **Atypical (AT)**: Other/rare forms
+        """)
         label_age = "Age du diabète (années)"
         label_type = "Type de diabète 1/2/AT"
+
+        # Retrieve rows
         age_row = df[df[0].astype(str).str.strip().str.lower() == label_age.lower()]
         type_row = df[df[0].astype(str).str.strip().str.lower() == label_type.lower()]
         if not age_row.empty and not type_row.empty:
-            idx_age = age_row.index[0]
-            idx_type = type_row.index[0]
-            age_vals = pd.to_numeric(df.loc[idx_age, 1:], errors='coerce')
-            type_vals = df.loc[idx_type, 1:].astype(str).str.strip().str.upper()
+            age_vals = pd.to_numeric(df.loc[age_row.index[0], 1:], errors='coerce')
+            type_vals = df.loc[type_row.index[0], 1:].astype(str).str.strip().str.upper()
+
+            # Filter valid types
             valid = (type_vals != "NON DIAB") & type_vals.isin(["1", "2", "AT"])
             df_diabetes = pd.DataFrame({
                 "AgeOnset": age_vals[valid],
                 "Type": type_vals[valid].map({"1": "Type 1", "2": "Type 2", "AT": "Atypical"})
             }).dropna()
+
             if not df_diabetes.empty:
-                summary = df_diabetes.groupby("Type")["AgeOnset"].agg(['count', 'mean', 'std', 'min', 'max']).round(2)
-                st.dataframe(summary)
+                # Boxplot
+                fig_age_type, ax_age_type = plt.subplots(figsize=(7, 4))
+                palette = {"Type 1": "#4C72B0", "Type 2": "#EAAA00", "Atypical": "#D55E00"}
+
+                sns.boxplot(data=df_diabetes, x="Type", y="AgeOnset", palette=palette, ax=ax_age_type)
+                sns.stripplot(data=df_diabetes, x="Type", y="AgeOnset", color='black', size=4, jitter=True, alpha=0.5, ax=ax_age_type)
+
+                ax_age_type.set_title("Distribution of Diabetes Age by Type", fontsize=13, weight='bold')
+                ax_age_type.set_ylabel("Age at Diagnosis (years)")
+                ax_age_type.set_xlabel("")
+                ax_age_type.grid(axis='y', linestyle='--', alpha=0.4)
+                st.pyplot(fig_age_type)
+
+                # 📋 Summary table
+                st.markdown("#### 📋 Summary Statistics by Type")
+                summary = df_diabetes.groupby("Type")["AgeOnset"].agg(['count', 'mean', 'std', 'min', 'max']).round(1)
+                st.dataframe(summary.style.format(precision=1))
             else:
                 st.warning("⚠️ No valid diabetes type and age combinations found.")
         else:
-            st.warning("⚠️ Labels for diabetes type or age not found.")
+            st.warning("⚠️ Labels for diabetes type or age not found in your dataset.")
 
-        # HbA1c by Insulin Use
-        st.subheader("🧪 HbA1c by Insulin Use")
-        hba1c_label = "Hba1c"
-        insulin_label = "Insuline (Y/N)"
-        hba1c_row = df[df[0].astype(str).str.strip().str.lower() == hba1c_label.lower()]
-        insulin_row = df[df[0].astype(str).str.strip().str.lower() == insulin_label.lower()]
-        if not hba1c_row.empty and not insulin_row.empty:
-            hba1c_vals = pd.to_numeric(df.loc[hba1c_row.index[0], 1:], errors='coerce')
-            insulin_vals = df.loc[insulin_row.index[0], 1:].astype(str).str.strip().str.upper()
-            df_hba1c = pd.DataFrame({"Hba1c": hba1c_vals, "Insulin": insulin_vals})
-            df_hba1c = df_hba1c[df_hba1c["Insulin"].isin(["Y", "N"])].dropna()
-            if not df_hba1c.empty:
-                df_hba1c["Insulin"] = df_hba1c["Insulin"].map({"Y": "Yes", "N": "No"})
-                stats_hba1c = df_hba1c.groupby("Insulin")["Hba1c"].agg(["count", "mean", "std", "min", "median", "max"]).round(2)
-                st.dataframe(stats_hba1c)
-                fig_hba1c, ax_hba1c = plt.subplots()
-                sns.boxplot(data=df_hba1c, x="Insulin", y="Hba1c", palette="Set2", ax=ax_hba1c)
-                ax_hba1c.set_title("Hba1c Distribution by Insulin Use")
-                st.pyplot(fig_hba1c)
-            else:
-                st.warning("⚠️ No valid Hba1c and insulin values found.")
-        else:
-            st.warning("⚠️ Hba1c or Insulin label not found.")
-
-    # ================================
-    # 📌 Stat Summary Extractor
-    # ================================
-    elif analysis_type == "GMM Clustering":
-        st.subheader("🔍 GMM Clustering Based on Features Correlated with Grade")
-
-        from sklearn.mixture import GaussianMixture
-        from sklearn.metrics import adjusted_rand_score
-        from sklearn.decomposition import PCA
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.impute import SimpleImputer
-
-        # 🔹 Step 1: Locate risk grades row
-        label_risk = "Grade de risque IWGDF"
-        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
-        if row_risk.empty:
-            st.error(f"Label '{label_risk}' not found.")
-            st.stop()
-
-        idx_risk = row_risk.index[0]
-        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
-        expected_length = len(risk_values)
-
-        # 🔹 Step 2: Define features of interest (row indices)
-        target_rows = {
-            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
-            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L",
-            96: "ROM Ankle R", 97: "ROM Ankle L",
-            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
-            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
-            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
-            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
-            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-            126: "US Épaisseur ED SESA D", 127: "US Épaisseur ED HALLUX D", 128: "US Épaisseur ED TM5 D",
-            130: "US Épaisseur ED SESA G", 131: "US Épaisseur ED HALLUX G", 132: "US Épaisseur ED TM5 G",
-            134: "US Épaisseur Hypoderme SESA D", 135: "US Épaisseur Hypoderme HALLUX D",
-            136: "US Épaisseur Hypoderme TM5 D", 138: "US Épaisseur Hypoderme SESA G",
-            139: "US Épaisseur Hypoderme HALLUX G", 140: "US Épaisseur Hypoderme TM5 G",
-            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
-            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
-            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
-            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
-            19: "BMI", 24: "AOMI", 59: "Michigan Score", 72: "Charcot Sanders", 75: "ATCD Charcot Aigue D",
-            76: "ATCD Charcot Aigue G", 158: "Temperature Hallux D", 159: "Temperature 5th Toe D",
-            160: "Temperature Plantar Arch D", 161: "Temperature Lateral Sole D", 162: "Temperature Forefoot D",
-            163: "Temperature Heel D", 164: "Temperature Hallux G", 165: "Temperature 5th Toe G",
-            166: "Temperature Plantar Arch G", 167: "Temperature Lateral Sole G", 168: "Temperature Forefoot G",
-            169: "Temperature Heel G", 170: "Temperature Hand Mean D", 171: "Temperature Hand Mean G",
-        }
-
-        # 🔹 Step 3: Extract features + Impute missing
-        feature_dict = {}
-        invalid_rows = []
-
-        for idx, name in target_rows.items():
-            try:
-                values = pd.to_numeric(df.iloc[idx, 1:], errors='coerce').values
-                values = values[:expected_length]  # truncate to expected_length (20)
-                if np.count_nonzero(~np.isnan(values)) < expected_length:
-                    # Impute missing values with mean
-                    mean_val = np.nanmean(values)
-                    if np.isnan(mean_val):
-                        invalid_rows.append((idx, name, "All values are NaN"))
-                        continue
-                    imputed = np.where(np.isnan(values), mean_val, values)
-                    values = imputed
-                if len(values) != expected_length:
-                    invalid_rows.append((idx, name, f"Length after imputation: {len(values)}"))
-                    continue
-                feature_dict[name] = values
-            except Exception as e:
-                invalid_rows.append((idx, name, str(e)))
-
-        if not feature_dict:
-            st.error("❌ No valid features extracted. Check the data format.")
-            st.write("🛠️ Debug Info - Invalid/Mismatched rows:")
-            st.write(invalid_rows)
-            st.stop()
-
-        # Ensure all feature arrays are same length
-        lengths = [len(v) for v in feature_dict.values()]
-        if len(set(lengths)) != 1:
-            st.error("❌ Features have unequal lengths. Cannot construct DataFrame.")
-            st.write("🛠️ Feature lengths:", lengths)
-            st.stop()
-
-        df_features = pd.DataFrame(feature_dict)
-        df_features["Grade"] = risk_values.values[:expected_length]
-        df_features["Group"] = df_features["Grade"].apply(lambda x: "A (Grades 0-1)" if x in [0, 1] else "B (Grades 2-3)")
-
-        # 🔹 Step 4: Correlation with Grade
-        corr_with_grade = df_features.drop(columns=["Group"]).corr()["Grade"].drop("Grade")
-        top_features = corr_with_grade.abs().sort_values(ascending=False).head(6).index.tolist()
-
-        if not top_features:
-            st.error("❌ No top features correlated with grade.")
-            st.stop()
-
-        st.write("📌 Using top features:", ", ".join(top_features))
-
-        # 🔹 Step 5: GMM Clustering
-        X = df_features[top_features]
-        y_true = df_features["Grade"]
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
-
-        gmm = GaussianMixture(n_components=4, random_state=42)
-        clusters = gmm.fit_predict(X_scaled)
-        df_features["GMM_Cluster"] = clusters
-
-        # 🔹 Step 6: Contingency Table & Heatmap
-        cluster_vs_grade = pd.crosstab(df_features["Grade"], df_features["GMM_Cluster"])
-        st.write("### 🔁 Cluster vs True Grade (Contingency Table)")
-        st.dataframe(cluster_vs_grade)
-
-        fig_heatmap, ax = plt.subplots(figsize=(8, 6))
-        sns.heatmap(cluster_vs_grade, annot=True, fmt="d", cmap="Blues", ax=ax)
-        ax.set_title("GMM Clustering vs Grade")
-        ax.set_xlabel("GMM Cluster")
-        ax.set_ylabel("True Grade")
-        st.pyplot(fig_heatmap)
-
-
-
-        st.subheader("Interpretation of Contingency Table & Heatmap:")
-        st.markdown("""
-        - This heatmap visually represents the `pd.crosstab` contingency table, showing the counts of data points where a specific 'True Grade' corresponds to a specific 'GMM Cluster'.
-        - **Ideal Scenario:** In a perfect clustering, each 'True Grade' row would have a single high value in one 'GMM Cluster' column and zeros elsewhere, indicating a one-to-one mapping.
-        - **Observations from this Heatmap:**
-            - **True Grade 0 (Row 0):** Largely maps to **GMM Cluster 1** (high count), with very few (or none) in other clusters. This indicates a good association.
-            - **True Grade 1 (Row 1):** Appears to be predominantly assigned to **GMM Cluster 2**.
-            - **True Grade 2 (Row 2):** Also predominantly assigned to **GMM Cluster 2**. This suggests that GMM Cluster 2 might be merging True Grade 1 and True Grade 2, indicating that these two grades are not well-separated by the GMM, or they share similar characteristics in the feature space.
-            - **True Grade 3 (Row 3):** Is distributed across multiple GMM Clusters (e.g., GMM Cluster 0, GMM Cluster 2, GMM Cluster 3). This indicates that True Grade 3 is not cleanly separated into a single GMM cluster, suggesting a more complex or dispersed representation in the feature space for this grade.
-        - **In summary:** The heatmap provides a clear visual breakdown of how well the GMM clusters align with the actual grade labels. We can identify which true grades are well-captured by specific clusters and which are mixed or spread out.
-        """)
-        # 🔹 Step 7: Adjusted Rand Index (ARI)
-        ari = adjusted_rand_score(y_true, clusters)
-        st.metric("🧮 Adjusted Rand Index (ARI)", f"{ari:.3f}")
-
-
-        st.subheader("Interpretation of Adjusted Rand Index (ARI):")
-        st.markdown(f"""
-        - The Adjusted Rand Index (ARI) is a measure of the similarity between two data clusterings. In this case, it compares the GMM clustering with the 'True Grade' labels.
-        - **Range:** The ARI score ranges from -1 to 1.
-            - An ARI of **1.0** indicates perfect agreement between the clustering and the true labels (i.e., the clusters exactly match the true grades).
-            - An ARI of **0.0** indicates that the clustering is random, as good as chance.
-            - A negative ARI indicates that the clustering is worse than random.
-        - **Current ARI ({ari:.3f}):** Based on this value, we can quantitatively assess the quality of our GMM clustering.
-            - If the value is close to 1, the GMM has done a good job of identifying the inherent grade structure.
-            - If it's closer to 0, the clustering is not significantly better than random assignment.
-            - Our current ARI indicates a [**insert your specific interpretation based on the value, e.g., 'moderate to good agreement', 'weak agreement', etc.**]. For example, if it's 0.6, you might say "a moderate to good agreement between the GMM clusters and the true grades."
-        """)
-
-        # 🔹 Step 8: PCA Visualization
-        X_pca = PCA(n_components=2).fit_transform(X_scaled)
-        pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
-        pca_df["GMM_Cluster"] = clusters
-        pca_df["True Grade"] = y_true.values
-
-        fig_pca, ax_pca = plt.subplots(figsize=(8, 6))
-        sns.scatterplot(data=pca_df, x="PC1", y="PC2", hue="GMM_Cluster", style="True Grade", palette="deep", ax=ax_pca)
-        ax_pca.set_title("PCA View: GMM Clusters vs True Grades")
-        st.pyplot(fig_pca)
-
-
-        st.subheader("Interpretation of PCA Visualization:")
-        st.markdown("""
-        - This scatter plot shows the data points projected onto the first two Principal Components (PC1 and PC2), which capture the most variance in the dataset.
-        - **Color (`hue='GMM_Cluster'`)**: Each data point is colored according to the GMM cluster it was assigned to. This shows the spatial grouping identified by the GMM.
-        - **Style (`style='True Grade'`)**: Each data point also has a unique marker style based on its actual 'True Grade'. This allows for a direct visual comparison between the GMM's clusters and the true underlying grades.
-        - **Observations from the plot:**
-            - **Spatial Separation of GMM Clusters:** We can observe how well the GMM algorithm has separated the data points into distinct regions in the 2D PCA space. Ideally, points of the same color (GMM cluster) would be tightly grouped.
-            - **Alignment with True Grades:** By looking at both color and style, we can see:
-                - **Well-separated Grades:** If a GMM cluster (a specific color) predominantly contains points of a single true grade style, it indicates good separation. For example, if **GMM Cluster 1 (orange circles)** primarily aligns with **True Grade 0 (black dots)**, it's a good match.
-                - **Mixed Grades:** If a GMM cluster contains points with various true grade styles, it suggests that the GMM is mixing those grades. For example, if **GMM Cluster 2 (green squares)** shows both **True Grade 1 (black x)** and **True Grade 2 (black square)**, it confirms the merging observed in the heatmap.
-                - **Spread Grades:** If points of a single true grade style are spread across multiple GMM clusters, it suggests that the GMM couldn't form a single, cohesive cluster for that grade. This is evident if **True Grade 3 (plus signs)** are found within multiple GMM clusters (e.g., blue, red).
-        - **In summary:** The PCA plot provides a valuable visual complement to the quantitative metrics and contingency table. It helps us understand *why* the ARI score is what it is, by showing the geometric relationships between the clustered data and their true labels.
-        """)
-        
     # ================================
     # 📌 Stat Summary Extractor
     # ================================
     elif analysis_type == "Descriptive Analysis":
         st.header("📊Descriptive Analysis")
+        st.markdown("---")
+        st.caption("📌 This section provides summary statistics (mean, median, std, min/max, quartiles) and normality tests (Shapiro-Wilk) for key biomechanical and clinical parameters collected from the DIAFOOT dataset.")
+        st.markdown("---")
+        
         normal_params = []
         non_normal_params = []
         summary_data = []
@@ -553,8 +471,9 @@ if uploaded_file:
             59: "Michigan Score(ok=13, risque=0)", 72: "Michigan Score2(ok=13, risque=0)", 
             75: "Medical history of acute Charcot R",76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R",
-            97: "ROM Ankle L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
             110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
             114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -580,11 +499,9 @@ if uploaded_file:
         }
         
         ecart_df = pd.DataFrame()
-
         for idx, label in target_rows.items():
             raw_values = df.iloc[idx, 1:]
             values = pd.to_numeric(raw_values, errors='coerce').dropna()
-
             if values.empty:
                 continue
 
@@ -599,7 +516,6 @@ if uploaded_file:
 
             # Normality test
             w_stat, p_value = shapiro(values)
-
             summary_data.append({
                 "Label": label,
                 "Mean": round(mean, 2),
@@ -626,7 +542,7 @@ if uploaded_file:
                 st.write(f"**Min:** {min_val:.2f} | **Q1:** {q1:.2f} | **Q3:** {q3:.2f} | **Max:** {max_val:.2f}")
                 st.write(f"**Shapiro-Wilk W:** {w_stat:.4f} | **p-value:** {p_value:.4f}")
 
-                # Plot boxplot with mean line
+                # Plot boxplot
                 fig, ax = plt.subplots()
                 sns.boxplot(x=values, ax=ax, color='lightblue', fliersize=5)
                 ax.axvline(mean, color='red', linestyle='--', label=f'Mean ({mean:.2f})')
@@ -678,8 +594,9 @@ if uploaded_file:
             59: "Michigan Score(ok=13, risque=0)", 72: "Michigan Score2(ok=13, risque=0)", 
             75: "Medical history of acute Charcot R",76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R",
-            97: "ROM Ankle L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
             110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
             114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -707,22 +624,19 @@ if uploaded_file:
         normal_params = []
         non_normal_params = []
         summary_data = []
-
         for idx, label in target_rows.items():
             raw_values = df.iloc[idx, 1:]
             values = pd.to_numeric(raw_values, errors='coerce').dropna()
-
             if values.empty:
                 continue
 
             # Shapiro-Wilk Test
             w_stat, p_shapiro = shapiro(values)
+            
             # Kolmogorov-Smirnov Test against normal distribution with sample mean and std
             from scipy.stats import kstest, norm
             ks_stat, p_ks = kstest(values, 'norm', args=(values.mean(), values.std()))
-
             is_normal = (p_shapiro > 0.05) and (p_ks > 0.05)
-
             summary_data.append({
                 "Label": label,
                 "Shapiro-W": round(w_stat, 4),
@@ -762,60 +676,137 @@ if uploaded_file:
         else:
             st.write("None")
 
-
     # ================================
-    # 📌 Hallux/SESA/TM5 – L/R Comparison by Parameter Type
+    # 📌 Hallux/SESA/TM5 – Left vs Right Comparison by Parameter Type
     # ================================
-    elif analysis_type == "Hallux/SESA/TM5 – L/R Comparison by Parameter Type":
-        st.subheader("📊 Comparison of Left vs Right by Anatomical Zone and Parameter Type")
-
+    elif analysis_type == "L/R Comparison by Anatomical Zone":
+        st.subheader("📊 Hallux/SESA/TM5 – L/R Comparison by Parameter Type")
+        st.markdown("---")
+        st.caption("This section compares left vs. right values across three anatomical zones (Hallux, SESA, TM5) for multiple parameter types (e.g., ultrasound thickness, pressure, stiffness). Significant differences (p < 0.05) are marked with * (* for p < 0.05, ** for p < 0.01, *** for p < 0.001). Numerical results are shown below each plot.")
+        st.markdown("---")
+        
+        # Epidermis + Dermis thickness values (manually selected rows)
         ep_derm_rows = {
             126: "Epiderm+Derm SESA D", 127: "Epiderm+Derm HALLUX D", 128: "Epiderm+Derm TM5 D",
             130: "Epiderm+Derm SESA G", 131: "Epiderm+Derm HALLUX G", 132: "Epiderm+Derm TM5 G"
         }
-
+        # Hypodermis thickness values
         hypo_rows = {
             134: "Hypoderm SESA D", 135: "Hypoderm HALLUX D", 136: "Hypoderm TM5 D",
             138: "Hypoderm SESA G", 139: "Hypoderm HALLUX G", 140: "Hypoderm TM5 G"
         }
-
+        
+        # Barplot function with statistical significance, numerical results, and diagnostics
         def plot_bar_parameter(data_dict, title, ylabel):
             locations = ["HALLUX", "SESA", "TM5"]
             sides = ["D", "G"]
             mapped = {"D": "Right", "G": "Left"}
-
             plot_data = []
+            p_values = {}
+            table_data = []
+            
+            # Collect data, perform t-tests, and prepare table
             for loc in locations:
+                right_vals = None
+                left_vals = None
                 for side in sides:
                     for key, label in data_dict.items():
                         if loc in label and side in label:
-                            vals = df.loc[key, 1:].astype(float)
-                            mean = vals.mean()
-                            std = vals.std()
+                            vals = df.loc[key, 1:].astype(float).dropna()
                             plot_data.append({
                                 "Location": loc,
                                 "Side": mapped[side],
-                                "Mean": mean,
-                                "STD": std
+                                "Mean": vals.mean(),
+                                "STD": vals.std()
                             })
-
+                            table_data.append({
+                                "Zone": loc,
+                                "Side": mapped[side],
+                                "Mean": round(vals.mean(), 3) if not np.isnan(vals.mean()) else "NaN",
+                                "STD": round(vals.std(), 3) if not np.isnan(vals.std()) else "NaN"
+                            })
+                            if side == "D":
+                                right_vals = vals
+                            else:
+                                left_vals = vals
+                if right_vals is not None and left_vals is not None:
+                    if len(right_vals) == len(left_vals) and len(right_vals) > 0 and right_vals.std() > 0 and left_vals.std() > 0:
+                        try:
+                            t_stat, p_val = ttest_rel(right_vals, left_vals)
+                            p_values[loc] = p_val if not np.isnan(p_val) else 1.0
+                            table_data.append({
+                                "Zone": loc,
+                                "Side": "p-value",
+                                "Mean": round(p_val, 4) if not np.isnan(p_val) else "NaN",
+                                "STD": ""
+                            })
+                        except Exception as e:
+                            st.warning(f"T-test failed for {loc}: {str(e)}")
+                            p_values[loc] = 1.0
+                            table_data.append({
+                                "Zone": loc,
+                                "Side": "p-value",
+                                "Mean": "NaN",
+                                "STD": "T-test failed"
+                            })
+                    else:
+                        st.warning(f"T-test skipped for {loc}: " +
+                                (f"Empty or mismatched data (Right: {len(right_vals)}, Left: {len(left_vals)})" if len(right_vals) != len(left_vals) or len(right_vals) == 0 else
+                                    f"Zero variance in data for {loc}"))
+                        p_values[loc] = 1.0
+                        table_data.append({
+                            "Zone": loc,
+                            "Side": "p-value",
+                            "Mean": "NaN",
+                            "STD": "Invalid data"
+                        })
+                else:
+                    p_values[loc] = 1.0
+                    table_data.append({
+                        "Zone": loc,
+                        "Side": "p-value",
+                        "Mean": "NaN",
+                        "STD": "No data"
+                    })
+            
+            # Create bar plot
             plot_df = pd.DataFrame(plot_data)
-
+            if plot_df.empty:
+                st.warning(f"No valid data for {title}")
+                return
+            
             fig, ax = plt.subplots(figsize=(8, 5))
-            sns.barplot(data=plot_df, x="Location", y="Mean", hue="Side", ax=ax, palette="coolwarm", capsize=0.1)
+            sns.barplot(data=plot_df, x="Location", y="Mean", hue="Side", ax=ax,
+                        palette="coolwarm", capsize=0.1)
+            
+            # Add significance annotations
+            for i, loc in enumerate(locations):
+                if loc in p_values and not np.isnan(p_values[loc]) and p_values[loc] < 0.05:
+                    p_val = p_values[loc]
+                    stars = "***" if p_val < 0.001 else "**" if p_val < 0.01 else "*"
+                    max_y = plot_df[plot_df["Location"] == loc]["Mean"].max()
+                    if not np.isnan(max_y):
+                        ax.text(i, max_y + 0.05 * max_y, stars, ha='center', va='bottom', fontsize=12)
+            
             ax.set_title(title)
             ax.set_ylabel(ylabel)
             ax.grid(True)
             st.pyplot(fig)
-
-        plot_bar_parameter(ep_derm_rows, "Combined Epidermis + Dermis Thickness", "Thickness (mm)")
-        plot_bar_parameter(hypo_rows, "Hypodermis Thickness", "Thickness (mm)")
-
-        # Define your anatomical zones
+            
+            # Display numerical results
+            st.subheader(f"Results for {title}")
+            table_df = pd.DataFrame(table_data)
+            st.dataframe(table_df)
+        
+        # Plot thickness by skin layer
+        plot_bar_parameter(ep_derm_rows, "Epidermis + Dermis Thickness – L/R", "Thickness (mm)")
+        plot_bar_parameter(hypo_rows, "Hypodermis Thickness – L/R", "Thickness (mm)")
+        
+        # Define zones and side labels for more general use
         zones = ["HALLUX", "SESA", "TM5"]
         sides = {"R": "Right", "L": "Left"}
-
-        # Function to group parameters by type (based on label keyword)
+        
+        # Group parameters by type
         def group_parameters_by_type(target_rows, types_keywords):
             grouped = {k: {} for k in types_keywords}
             for row_idx, label in target_rows.items():
@@ -827,64 +818,139 @@ if uploaded_file:
                                     if k.lower() in label.lower():
                                         grouped[k][row_idx] = f"{k} {zone} {side}"
             return grouped
-
-        # Define the categories you want to visualize
-        parameter_types = ["Avg Pressure", "Stiffness", "US Épaisseur ED", "US Épaisseur Hypoderme", "Total Tissue Thickness", "ROC"]
-
-        # Group row indices by type
+        
+        # Categories to compare L/R in barplots
+        parameter_types = [
+            "Avg Pressure", "Stiffness",
+            "US Épaisseur ED", "US Épaisseur Hypoderme",
+            "Total Tissue Thickness", "ROC"
+        ]
+        
+        # Group selected target parameters into categories
         grouped_params = group_parameters_by_type(target_rows, parameter_types)
-
-        # Generic plotter
+        
+        # L/R bar plot per parameter type with statistical significance and numerical results
         def plot_combined_bar(data_dict, title, ylabel):
             plot_data = []
-            for key, label in data_dict.items():
-                for zone in zones:
-                    for side_code, side_label in sides.items():
-                        if zone in label and side_label in label:
-                            try:
-                                vals = df.loc[key, 1:].astype(float)
-                                plot_data.append({
-                                    "Zone": zone,
-                                    "Side": side_label,
-                                    "Mean": vals.mean(),
-                                    "STD": vals.std()
-                                })
-                            except:
-                                pass
-
+            p_values = {}
+            table_data = []
+            
+            # Collect data, perform t-tests, and prepare table
+            for zone in zones:
+                right_vals = None
+                left_vals = None
+                for key, label in data_dict.items():
+                    if zone in label:
+                        for side_code, side_label in sides.items():
+                            if side_label in label:
+                                try:
+                                    vals = df.loc[key, 1:].astype(float).dropna()
+                                    plot_data.append({
+                                        "Zone": zone,
+                                        "Side": side_label,
+                                        "Mean": vals.mean(),
+                                        "STD": vals.std()
+                                    })
+                                    table_data.append({
+                                        "Zone": zone,
+                                        "Side": side_label,
+                                        "Mean": round(vals.mean(), 3) if not np.isnan(vals.mean()) else "NaN",
+                                        "STD": round(vals.std(), 3) if not np.isnan(vals.std()) else "NaN"
+                                    })
+                                    if side_label == "Right":
+                                        right_vals = vals
+                                    else:
+                                        left_vals = vals
+                                except:
+                                    pass
+                if right_vals is not None and left_vals is not None:
+                    if len(right_vals) == len(left_vals) and len(right_vals) > 0 and right_vals.std() > 0 and left_vals.std() > 0:
+                        try:
+                            t_stat, p_val = ttest_rel(right_vals, left_vals)
+                            p_values[zone] = p_val if not np.isnan(p_val) else 1.0
+                            table_data.append({
+                                "Zone": zone,
+                                "Side": "p-value",
+                                "Mean": round(p_val, 4) if not np.isnan(p_val) else "NaN",
+                                "STD": ""
+                            })
+                        except Exception as e:
+                            st.warning(f"T-test failed for {zone}: {str(e)}")
+                            p_values[zone] = 1.0
+                            table_data.append({
+                                "Zone": zone,
+                                "Side": "p-value",
+                                "Mean": "NaN",
+                                "STD": "T-test failed"
+                            })
+                    else:
+                        st.warning(f"T-test skipped for {zone}: " +
+                                (f"Empty or mismatched data (Right: {len(right_vals)}, Left: {len(left_vals)})" if len(right_vals) != len(left_vals) or len(right_vals) == 0 else
+                                    f"Zero variance in data for {zone}"))
+                        p_values[zone] = 1.0
+                        table_data.append({
+                            "Zone": zone,
+                            "Side": "p-value",
+                            "Mean": "NaN",
+                            "STD": "Invalid data"
+                        })
+                else:
+                    st.warning(f"No data available for {zone} (Right: {right_vals is not None}, Left: {left_vals is not None})")
+                    p_values[zone] = 1.0
+                    table_data.append({
+                        "Zone": zone,
+                        "Side": "p-value",
+                        "Mean": "NaN",
+                        "STD": "No data"
+                    })
+            
             plot_df = pd.DataFrame(plot_data)
-
             if plot_df.empty:
                 st.warning(f"No valid data found for {title}")
                 return
-
+            
+            # Create bar plot
             fig, ax = plt.subplots(figsize=(8, 5))
             sns.barplot(data=plot_df, x="Zone", y="Mean", hue="Side", ax=ax,
                         palette="coolwarm", capsize=0.1, errwidth=1)
+            
+            # Add significance annotations
+            for i, zone in enumerate(zones):
+                if zone in p_values and not np.isnan(p_values[zone]) and p_values[zone] < 0.05:
+                    p_val = p_values[zone]
+                    stars = "***" if p_val < 0.001 else "**" if p_val < 0.01 else "*"
+                    max_y = plot_df[plot_df["Zone"] == zone]["Mean"].max()
+                    if not np.isnan(max_y):
+                        ax.text(i, max_y + 0.05 * max_y, stars, ha='center', va='bottom', fontsize=12)
+            
             ax.set_title(title)
             ax.set_ylabel(ylabel)
             ax.grid(True)
             st.pyplot(fig)
-
-        # Plot each type
+            
+            # Display numerical results
+            st.subheader(f"Results for {title}")
+            table_df = pd.DataFrame(table_data)
+            st.dataframe(table_df)
+        
+        # Loop through each parameter group and plot it
         for ptype, row_dict in grouped_params.items():
             plot_combined_bar(row_dict, f"{ptype} – Left vs Right Comparison", "Mean Value")
-              
+        
     # ================================
     # 📌 Comparison of Left and Right Foot Parameters
     # ================================
     elif analysis_type == "Comparison of Left and Right Foot Parameters":
-
-        st.header("🦶 Comparison of Left and Right Foot Parameters with Plots")
-
+        st.header("Comparison of Left and Right Foot Parameters with Plots")
         target_rows = {
             17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
             37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
             59: "Michigan Score(ok=13, risque=0)", 72: "Michigan Score2(ok=13, risque=0)", 
             75: "Medical history of acute Charcot R",76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R",
-            97: "ROM Ankle L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
             110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
             114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -919,27 +985,31 @@ if uploaded_file:
                     paired_parameters.append((label_r, label_l, idx_r, idx_l))
 
         st.subheader("🔬 Paired Tests + Boxplots")
+        
+        st.markdown("---")
+        st.caption("🔍 This section compares left and right foot values for all matched biomechanical and clinical parameters.")
+        st.caption("- It automatically detects parameter pairs (e.g., 'Stiffness TM5 R' vs. 'Stiffness TM5 L') based on zone and side.")
+        st.caption("- Normality is tested using the Shapiro-Wilk test, followed by a paired t-test or Wilcoxon test depending on distribution.")
+        st.caption("- Side-by-side boxplots visualize the distributions of left and right values for each zone and parameter.")
+        st.caption("- All test results — including means, medians, p-values, and test type — can be exported in Excel format.")
+        st.markdown("---")
 
-        # Collect all comparison results
         comparison_results = []
-
         for label_r, label_l, idx_r, idx_l in paired_parameters:
             values_r = pd.to_numeric(df.iloc[idx_r, 1:], errors='coerce').dropna()
             values_l = pd.to_numeric(df.iloc[idx_l, 1:], errors='coerce').dropna()
-
             common_len = min(len(values_r), len(values_l))
             values_r = values_r.iloc[:common_len]
             values_l = values_l.iloc[:common_len]
 
-            # 🔒 Check for minimum data length
-            if common_len < 3:
+            # Check for minimum data length
+            if common_len < 2:
                 st.warning(f"Not enough data to test: {label_r} vs {label_l} (n={common_len})")
                 continue
 
             # Normality Bland-Altman Pooled Plots
             p_r = shapiro(values_r)[1]
             p_l = shapiro(values_l)[1]
-
             if p_r > 0.05 and p_l > 0.05:
                 stat, p_val = ttest_rel(values_r, values_l)
                 test_name = "Paired t-test"
@@ -960,20 +1030,16 @@ if uploaded_file:
                 "Median Left": values_l.median(),
                 "N": common_len
             })
-
-            # Plotting as before
             st.markdown(f"### {label_r} vs {label_l}")
             st.write(f"**Test used:** {test_name}")
             st.write(f"**Statistic:** {stat:.4f}", f"**p-value:** {p_val:.4f}")
-
             data_plot = pd.DataFrame({
                 'Right': values_r.reset_index(drop=True),
                 'Left': values_l.reset_index(drop=True)
             })
-
             fig, ax = plt.subplots(figsize=(6, 4))
             sns.boxplot(data=data_plot, ax=ax, palette=["#90CAF9", "#F48FB1"])
-
+            
             for i, col in enumerate(data_plot.columns):
                 mean_val = data_plot[col].mean()
                 median_val = data_plot[col].median()
@@ -1000,17 +1066,195 @@ if uploaded_file:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # ================================
+    # 📐 Parameter Summary: Diabetic vs Control
+    # ================================
+    elif analysis_type == "Diabetic vs Control":
+        st.header("📊 Parameter Summary: Diabetic vs Control")
+        st.markdown("---")
+        st.caption("This section compares pooled left and right values between Diabetic Neuropathy and Control groups.")
+        st.caption("Metrics include Total Tissue Thickness, Plantar Pressure, and Stiffness across HALLUX, SESA, and TM5 regions.")
+        st.caption("Data is grouped using IWGDF classification (0 = Control, ≥1 = Diabetic Neuropathy).")
+        st.caption("Summary statistics include sample size, mean ± standard deviation, and observed range.")
+        st.markdown("---")
+
+        target_rows = {
+            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            126: "US Épaisseur ED SESA D", 127: "US Épaisseur ED HALLUX D", 128: "US Épaisseur ED TM5 D",
+            130: "US Épaisseur ED SESA G", 131: "US Épaisseur ED HALLUX G", 132: "US Épaisseur ED TM5 G",
+            134: "US Épaisseur Hypoderme SESA D", 135: "US Épaisseur Hypoderme HALLUX D",
+            136: "US Épaisseur Hypoderme TM5 D", 138: "US Épaisseur Hypoderme SESA G",
+            139: "US Épaisseur Hypoderme HALLUX G", 140: "US Épaisseur Hypoderme TM5 G",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
+            19: "BMI", 24: "AOMI", 59: "Michigan Score", 72: "Charcot Sanders", 75: "ATCD Charcot Aigue D",
+            76: "ATCD Charcot Aigue G", 158: "Temperature Hallux D", 159: "Temperature 5th Toe D",
+            160: "Temperature Plantar Arch D", 161: "Temperature Lateral Sole D", 162: "Temperature Forefoot D",
+            163: "Temperature Heel D", 164: "Temperature Hallux G", 165: "Temperature 5th Toe G",
+            166: "Temperature Plantar Arch G", 167: "Temperature Lateral Sole G", 168: "Temperature Forefoot G",
+            169: "Temperature Heel G", 170: "Temperature Hand Mean D", 171: "Temperature Hand Mean G",
+        }
+
+        # ================== HALLUX ==================
+        epi_HD = pd.to_numeric(df.iloc[127].replace("NR", np.nan), errors="coerce")
+        epi_HG = pd.to_numeric(df.iloc[131].replace("NR", np.nan), errors="coerce")
+        hypo_HD = pd.to_numeric(df.iloc[135].replace("NR", np.nan), errors="coerce")
+        hypo_HG = pd.to_numeric(df.iloc[139].replace("NR", np.nan), errors="coerce")
+        total_HALLUX_R = epi_HD + hypo_HD
+        total_HALLUX_L = epi_HG + hypo_HG
+
+        # ================== DUROMETER HALLUX ==================
+        duro_HD = pd.to_numeric(df.iloc[119].replace("NR", np.nan), errors="coerce")
+        duro_HG = pd.to_numeric(df.iloc[123].replace("NR", np.nan), errors="coerce")
+
+        pooled_duro_hallux = pd.concat([duro_HD, duro_HG], ignore_index=True)
+
+        # ================== SESA ==================
+        epi_SD = pd.to_numeric(df.iloc[126].replace("NR", np.nan), errors="coerce")
+        epi_SG = pd.to_numeric(df.iloc[130].replace("NR", np.nan), errors="coerce")
+        hypo_SD = pd.to_numeric(df.iloc[134].replace("NR", np.nan), errors="coerce")
+        hypo_SG = pd.to_numeric(df.iloc[138].replace("NR", np.nan), errors="coerce")
+        total_SESA_R = epi_SD + hypo_SD
+        total_SESA_L = epi_SG + hypo_SG
+
+        # ================== TM5 ==================
+        epi_TD = pd.to_numeric(df.iloc[128].replace("NR", np.nan), errors="coerce")
+        epi_TG = pd.to_numeric(df.iloc[132].replace("NR", np.nan), errors="coerce")
+        hypo_TD = pd.to_numeric(df.iloc[137].replace("NR", np.nan), errors="coerce")
+        hypo_TG = pd.to_numeric(df.iloc[140].replace("NR", np.nan), errors="coerce")
+        total_TM5_R = epi_TD + hypo_TD
+        total_TM5_L = epi_TG + hypo_TG
+
+        # ================== DUROMETER SESA ==================
+        duro_SD = pd.to_numeric(df.iloc[118].replace("NR", np.nan), errors="coerce")
+        duro_SG = pd.to_numeric(df.iloc[122].replace("NR", np.nan), errors="coerce")
+        pooled_duro_sesa = pd.concat([duro_SD, duro_SG], ignore_index=True)
+
+        # ================== DUROMETER TM5 ==================
+        duro_TM5D = pd.to_numeric(df.iloc[120].replace("NR", np.nan), errors="coerce")
+        duro_TM5G = pd.to_numeric(df.iloc[124].replace("NR", np.nan), errors="coerce")
+        pooled_duro_tm5 = pd.concat([duro_TM5D, duro_TM5G], ignore_index=True)
+
+        # ================== PEAK PLANTAR PRESSURE: HALLUX (Toes) ==================
+        pressure_HALLUX_D = pd.to_numeric(df.iloc[109].replace("NR", np.nan), errors="coerce")
+        pressure_HALLUX_G = pd.to_numeric(df.iloc[114].replace("NR", np.nan), errors="coerce")
+        pooled_pressure_hallux = pd.concat([pressure_HALLUX_D, pressure_HALLUX_G], ignore_index=True)
+
+        # ================== PEAK PLANTAR PRESSURE: TM5 ==================
+        pressure_TM5_D = pd.to_numeric(df.iloc[110].replace("NR", np.nan), errors="coerce")
+        pressure_TM5_G = pd.to_numeric(df.iloc[115].replace("NR", np.nan), errors="coerce")
+        pooled_pressure_tm5 = pd.concat([pressure_TM5_D, pressure_TM5_G], ignore_index=True)
+
+        # ================== PEAK PLANTAR PRESSURE: FOREFOOT ==================
+        # We'll approximate forefoot pressure using "Pression MAX autre localisation"
+        pressure_forefoot_D = pd.to_numeric(df.iloc[112].replace("NR", np.nan), errors="coerce")
+        pressure_forefoot_G = pd.to_numeric(df.iloc[117].replace("NR", np.nan), errors="coerce")
+        pooled_pressure_forefoot = pd.concat([pressure_forefoot_D, pressure_forefoot_G], ignore_index=True)
+
+        # ================== PEAK PLANTAR PRESSURE: SESA ==================
+        pressure_SESA_D = pd.to_numeric(df.iloc[108].replace("NR", np.nan), errors="coerce")
+        pressure_SESA_G = pd.to_numeric(df.iloc[113].replace("NR", np.nan), errors="coerce")
+        pooled_pressure_sesa = pd.concat([pressure_SESA_D, pressure_SESA_G], ignore_index=True)
+
+        # ================== Combine (pooled L+R) ==================
+        pooled_hallux = pd.concat([total_HALLUX_R, total_HALLUX_L], ignore_index=True)
+        pooled_sesa = pd.concat([total_SESA_R, total_SESA_L], ignore_index=True)
+        pooled_tm5 = pd.concat([total_TM5_R, total_TM5_L], ignore_index=True)
+
+        # Reuse duplicated IWGDF (if already defined)
+        if 'iwgdf_pooled' not in locals():
+            iwgdf = pd.to_numeric(df.iloc[16], errors="coerce")
+            iwgdf_pooled = pd.Series(list(iwgdf) * 2, index=pooled_duro_hallux.index)
+
+        # ================== Group masks ==================
+        ctrl_mask = iwgdf_pooled == 0
+        neuro_mask = iwgdf_pooled >= 1
+
+        # ================== Summary Function ==================
+        def summarize(data, mask, label):
+            values = data[mask].dropna()
+            if len(values) == 0:
+                return {"Group": label, "N": 0, "Mean ± SD": "NA", "Range": "NA"}
+            return {
+                "Group": label,
+                "N": len(values),
+                "Mean ± SD": f"{values.mean():.2f} ± {values.std():.2f}",
+                "Range": f"[{values.min():.2f} – {values.max():.2f}]"
+            }
+
+        # ================== Build Result Table ==================
+        summary = [
+            summarize(pooled_hallux, ctrl_mask, "Total Thickness HALLUX - Control"),
+            summarize(pooled_hallux, neuro_mask, "Total Thickness HALLUX - Neuropath"),
+            summarize(pooled_sesa, ctrl_mask, "Total Thickness SESA (MS) - Control"),
+            summarize(pooled_sesa, neuro_mask, "Total Thickness SESA (MS) - Neuropath"),
+            summarize(pooled_tm5, ctrl_mask, "Total Thickness TM5 - Control"),
+            summarize(pooled_tm5, neuro_mask, "Total Thickness TM5 - Neuropath"),
+            summarize(pooled_duro_hallux, ctrl_mask, "Durometer HALLUX - Control"),
+            summarize(pooled_duro_hallux, neuro_mask, "Durometer HALLUX - Neuropath"),
+            summarize(pooled_duro_sesa, ctrl_mask, "Durometer SESA - Control"),
+            summarize(pooled_duro_sesa, neuro_mask, "Durometer SESA - Neuropath"),
+            summarize(pooled_duro_tm5, ctrl_mask, "Durometer TM5 - Control"),
+            summarize(pooled_duro_tm5, neuro_mask, "Durometer TM5 - Neuropath"),
+            summarize(pooled_pressure_sesa, ctrl_mask, "PPP SESA - Control"),
+            summarize(pooled_pressure_sesa, neuro_mask, "PPP SESA - Neuropath"),
+            summarize(pooled_pressure_tm5, ctrl_mask, "PPP TM5 - Control"),
+            summarize(pooled_pressure_tm5, neuro_mask, "PPP TM5 - Neuropath"),
+            summarize(pooled_pressure_hallux, ctrl_mask, "PPP Toes (Hallux + autres) - Control"),
+            summarize(pooled_pressure_hallux, neuro_mask, "PPP Toes (Hallux + autres) - Neuropath"),
+            summarize(pooled_pressure_forefoot, ctrl_mask, "PPP Avant-pied (Hallux + MT1–MT5) - Control"),
+            summarize(pooled_pressure_forefoot, neuro_mask, "PPP Avant-pied (Hallux + MT1–MT5) - Neuropath"),
+        ]
+
+        summary_df = pd.DataFrame(summary)
+        st.dataframe(summary_df)    
+        st.markdown("---")
+        
+        sns.set(style="whitegrid")
+        
     # ================================
     # 📌 IWGDF Risk Grade Summary & KMeans Clustering
     # ================================
-    elif analysis_type == "IWGDF Risk Grade Summary & Clustering":       
+    elif analysis_type == "IWGDF Risk Grade Summary & Clustering":     
+        st.header("📌 IWGDF Risk Grade Summary & KMeans Clustering")  
         target_rows = {
-            6: "Date of Birth", 16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
+            6: "Date of Birth", 16: "Grade IWGDF", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
             35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
             59: "Michigan Score (ok=13, risk=0)", 72: "Michigan Score2 (ok=13, risk=0)",
             75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L",
             108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
             113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -1033,55 +1277,40 @@ if uploaded_file:
             212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
         }
 
-        # 🔍 Step 2: Locate the row that contains IWGDF risk grades
         label_risk = "Grade de risque IWGDF"
         row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
         if row_risk.empty:
             st.error(f"Label '{label_risk}' not found in the Excel sheet.")
             st.stop()
 
-        # 🔢 Extract the actual values from the row found above
+        # Extract the actual values from the row found above
         idx_risk = row_risk.index[0]
         risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
         patient_ids = risk_values.index
 
-        # 🧠 Step 3: Extract selected features for each patient
         selected_data = df.loc[target_rows.keys(), 1:1 + len(risk_values) - 1]
         selected_data.index = [target_rows[i] for i in selected_data.index]  # Convert index to labels
         features_df = selected_data.T.apply(pd.to_numeric, errors='coerce')  # Transpose and convert to numeric
         features_df = features_df.loc[patient_ids]  # Align rows to patient order
 
-        # ⚠️ Handle missing data
+        # Handle missing data
         imputer = SimpleImputer(strategy="mean")
         X_imputed = imputer.fit_transform(features_df.values)
 
-        # 🤖 Step 4: Apply KMeans clustering
+        # Apply KMeans clustering
         kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
         clusters = kmeans.fit_predict(X_imputed)
 
-        # 🧾 Build results DataFrame with grade and cluster for each patient
+        #  Build results DataFrame with grade and cluster for each patient
         results = pd.DataFrame({
             "Patient": patient_ids,
             "IWGDF_Grade": risk_values.loc[patient_ids].values,
             "Cluster": clusters
         }, index=patient_ids)
 
-        # 🧪 Step 5: Evaluate how well clusters match IWGDF grades
-        st.markdown("### 👮️ Clustering vs. IWGDF Grade")
         contingency = pd.crosstab(results["Cluster"], results["IWGDF_Grade"])
-        st.dataframe(contingency)
-        ari = adjusted_rand_score(results["IWGDF_Grade"], results["Cluster"])
-        st.markdown(f"**Adjusted Rand Index:** {ari:.3f}")
 
-        # 📢 Interpretation of clustering validity
-        if ari < 0.2:
-            st.info("🧠 The clustering does not align well with the IWGDF grading — it groups patients differently.")
-        elif ari < 0.5:
-            st.info("🧠 Moderate alignment between clusters and IWGDF grades — possible overlap or partial structure.")
-        else:
-            st.success("🧠 Clustering agrees well with IWGDF grades — clustering reflects the known risk structure.")
-
-        # 🎨 Step 6: Plot clustering colored by group
+        # Plot clustering colored by group
         fig, ax = plt.subplots(figsize=(10, 5))
         sc = ax.scatter(results["Patient"], results["IWGDF_Grade"], cmap="jet", edgecolor='k')
         ax.set_xlabel("Patient ID")
@@ -1099,9 +1328,107 @@ if uploaded_file:
         - Each dot represents a patient.
         """)
 
-        # ============================
-        # 📊 Function to compare groups
-        # ============================
+        param_cols = [c for c in df_combined.columns if c not in ["Grade", "Group", "Cluster", "PCA1", "PCA2"]]
+        st.write("Parameters to test:", param_cols)
+
+        grade_pairs = [(0, 1), (1, 2), (2, 3)]
+
+        for g in [0, 1, 2, 3]:
+            count = (df_combined["Grade"] == g).sum()
+            st.write(f"Number of samples in Grade {g}: {count}")
+
+        results = []
+        min_samples = 2  
+
+        for param in param_cols:
+            for g1, g2 in grade_pairs:
+                group1 = df_combined[df_combined["Grade"] == g1][param].dropna()
+                group2 = df_combined[df_combined["Grade"] == g2][param].dropna()
+
+                if len(group1) >= min_samples and len(group2) >= min_samples:
+                    # Normality check
+                    try:
+                        _, p1 = shapiro(group1)
+                        _, p2 = shapiro(group2)
+                        normal = (p1 > 0.05) and (p2 > 0.05)
+                    except Exception as e:
+                        normal = False
+
+                    if normal:
+                        stat, pval = ttest_ind(group1, group2)
+                        test_name = "t-test"
+                    else:
+                        stat, pval = mannwhitneyu(group1, group2)
+                        test_name = "Mann-Whitney U"
+
+                    results.append({
+                        "Parameter": param,
+                        "Grade 1": g1,
+                        "Grade 2": g2,
+                        "Test": test_name,
+                        "p-value": pval,
+                        "Significant": pval < 0.05,
+                        "Mean Grade 1": group1.mean(),
+                        "Mean Grade 2": group2.mean()
+                    })
+
+        if len(results) == 0:
+            st.warning(f"No statistical tests were performed because no groups had at least {min_samples} samples each.")
+        else:
+            df_results = pd.DataFrame(results)
+
+
+        st.header("Statistical Tests Between Combined Grades")
+
+        param_cols = [c for c in df_combined.columns if c not in ["Grade", "Group", "Cluster", "PCA1", "PCA2"]]
+
+        df_combined['Grade_combined'] = df_combined['Grade'].apply(lambda x: 'A (0-1)' if x in [0, 1] else ('B (2-3)' if x in [2, 3] else np.nan))
+
+        for group_label in ['A (0-1)', 'B (2-3)']:
+            count = (df_combined["Grade_combined"] == group_label).sum()
+            st.write(f"Number of samples in Group {group_label}: {count}")
+
+        results = []
+        min_samples = 2  
+
+        for param in param_cols:
+            groupA = df_combined[df_combined["Grade_combined"] == 'A (0-1)'][param].dropna()
+            groupB = df_combined[df_combined["Grade_combined"] == 'B (2-3)'][param].dropna()
+
+            if len(groupA) >= min_samples and len(groupB) >= min_samples:
+                # Normality check
+                try:
+                    _, p1 = shapiro(groupA)
+                    _, p2 = shapiro(groupB)
+                    normal = (p1 > 0.05) and (p2 > 0.05)
+                except Exception:
+                    normal = False
+
+                if normal:
+                    stat, pval = ttest_ind(groupA, groupB)
+                    test_name = "t-test"
+                else:
+                    stat, pval = mannwhitneyu(groupA, groupB)
+                    test_name = "Mann-Whitney U"
+
+                results.append({
+                    "Parameter": param,
+                    "Group 1": "A (0-1)",
+                    "Group 2": "B (2-3)",
+                    "Test": test_name,
+                    "p-value": pval,
+                    "Significant": pval < 0.05,
+                    "Mean Group 1": groupA.mean(),
+                    "Mean Group 2": groupB.mean()
+                })
+
+        if len(results) == 0:
+            st.warning(f"No statistical tests were performed because no groups had at least {min_samples} samples each.")
+        else:
+            df_results = pd.DataFrame(results)
+            st.write("Statistical test results sorted by p-value:")
+            st.dataframe(df_results.sort_values("p-value"))
+            
         def compare_groups_safely(name, group1_idx, group2_idx, features_df, min_samples=2, alpha=0.1, effect_threshold=0.05):
             st.markdown(f"#### {name}")
             st.write(f"Group sizes: {len(group1_idx)} vs {len(group2_idx)}")
@@ -1148,229 +1475,441 @@ if uploaded_file:
 
                     return df
 
-
-        # 📊 Step 7: Compare risk grade transitions
-        st.markdown("### 🔍 Parameter Transitions Between Risk Grades")
-        g0 = results[results["IWGDF_Grade"] == 0].index
-        g12 = results[results["IWGDF_Grade"].isin([1, 2])].index
-        df_0_12 = compare_groups_safely("Grade 0 → Grade 1 or 2", g0, g12, features_df)
-
-        g2 = results[results["IWGDF_Grade"] == 2].index
-        g3 = results[results["IWGDF_Grade"] == 3].index
-        df_2_3 = compare_groups_safely("Grade 2 → Grade 3", g2, g3, features_df)
-
-        # 📊 Step 8: Compare clusters directly
-        st.markdown("### 🔍 Parameter Differences Between Clusters")
-
-        cluster0_idx = results[results["IWGDF_Grade"].isin([0, 1])].index
-        cluster1_idx = results[results["IWGDF_Grade"].isin([2, 3])].index
-
-        df_cluster_comparison = compare_groups_safely(
-            "Cluster 0 (Grades 0–1) vs Cluster 1 (Grades 2–3)",
-            cluster0_idx,
-            cluster1_idx,
-            features_df
-        )
-
-
-        # 💾 Step 9: Export all analysis results to Excel
-        output_file = "IWGDF_transition_results.xlsx"
-        with pd.ExcelWriter(output_file) as writer:
-            results.to_excel(writer, sheet_name="Clustering", index=False)
-            contingency.to_excel(writer, sheet_name="Contingency")
-            df_0_12.to_excel(writer, sheet_name="0_to_1or2", index=False)
-            df_2_3.to_excel(writer, sheet_name="2_to_3", index=False)
-
-        # 💡 Provide download button
-        with open(output_file, "rb") as f:
-            st.download_button("📅 Download Transition Results", f, file_name=output_file)
-
-
-
     # ================================
-    # Clustering ignoring IWGDF Grade
+    # Clustering with More Important Parameters
     # ================================
-    elif analysis_type == "Clustering ignoring IWGDF Grade":
-        st.header("Unsupervised Clustering ignoring IWGDF Grade")
+    elif analysis_type == "Clustering (Important Parameters)":
+        st.header("Clustering with More Important Parameters")
+        important_params = {
+            16: "Grade IWGDF",
+            35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            59: "Michigan Score", 72: "Michigan Score2",
+            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
+            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
+            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
+            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
+            126: "US Thickness ED SESA R", 127: "US Thickness ED HALLUX R", 128: "US Thickness ED TM5 R",
+            130: "US Thickness ED SESA L", 131: "US Thickness ED HALLUX L", 132: "US Thickness ED TM5 L",
+            134: "US Thickness Hypodermis SESA R", 135: "US Thickness Hypodermis HALLUX R",
+            136: "US Thickness Hypodermis TM5 R", 138: "US Thickness Hypodermis SESA L",
+            139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
+            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
+            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
+            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude of talo-crural joint R",
+            97: "Amplitude of talo-crural joint L",
+            158: "Temperature Hallux R", 159: "Temperature 5th Toe R",
+            160: "Temperature Plantar Arch R", 161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R",
+            163: "Temperature Heel R", 164: "Temperature Hallux L", 165: "Temperature 5th Toe L",
+            166: "Temperature Plantar Arch L", 167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L",
+            169: "Temperature Heel L", 170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
+            172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
+            174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
+            176: "Normalized Temperature R", 177: "Normalized Temperature L",
+        }
 
-        # Transpose: features as rows, patients as columns
-        data = df_combined.drop(columns=["Grade", "Group"], errors="ignore").T
-
-        # Drop features (rows) with >50% missing values (i.e., not enough patient data)
-        threshold = data.shape[1] * 0.5
-        data = data.loc[data.isnull().sum(axis=1) < threshold]
-
-        # Impute missing values with row-wise median
-        data = data.apply(lambda row: row.fillna(row.median()), axis=1)
-
-        # Keep only features (rows) with at least 20 valid patient values
-        data = data.loc[data.count(axis=1) >= 20]
-
-        # Transpose back for clustering (patients = rows, features = columns)
-        features = data.T
-
-        st.write(f"Remaining features after cleaning ({features.shape[1]} features):")
-        st.write(list(features.columns))
-
-        if features.shape[1] == 0 or features.shape[0] < 2:
-            st.error("Not enough valid data for clustering after cleaning.")
-        else:
-            # Standardize
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(features)
-
-            # Agglomerative Clustering
-            k = st.slider("Select number of clusters", 2, 6, 3)
-            linkage_method = st.selectbox("Linkage method", ["ward", "complete", "average", "single"])
-
-            # 'ward' requires Euclidean distances
-            if linkage_method == "ward" and X_scaled.shape[1] < 2:
-                st.warning("Ward linkage requires at least 2 features. Please adjust filtering.")
-            else:
-                clustering = AgglomerativeClustering(n_clusters=k, linkage=linkage_method)
-                cluster_labels = clustering.fit_predict(X_scaled)
-
-                df_combined["Cluster_without_Grade"] = cluster_labels
-
-                st.write("Cluster assignments (first 10 patients):")
-                st.dataframe(df_combined[["Cluster_without_Grade", "Grade"]].head(10))
-
-                # PCA for 2D visualization
-                pca = PCA(n_components=2)
-                components = pca.fit_transform(X_scaled)
-                df_combined["PCA1"] = components[:, 0]
-                df_combined["PCA2"] = components[:, 1]
-
-                fig, ax = plt.subplots()
-                sns.scatterplot(data=df_combined, x="PCA1", y="PCA2", hue="Cluster_without_Grade", palette="Set2", ax=ax)
-                ax.set_title(f"PCA plot colored by Agglomerative Clustering ({linkage_method})")
-                st.pyplot(fig)
-
-    # ================================
-    # Clustering with IWGDF Grade Groups
-    # ================================
-    elif analysis_type == "Clustering with IWGDF Grade Groups":
-        st.header("Clustering with IWGDF Grade Groups (Agglomerative Clustering)")
-
+        # Extract IWGDF grades and patient IDs
         risk_row = df.iloc[16]
-        risk_label = risk_row[0]
-        if str(risk_label).strip().lower() != "grade de risque iwgdf":
-            st.error("Row 16 does not contain 'Grade de risque IWGDF' label.")
-            st.stop()
-            
         risk_values = pd.to_numeric(risk_row[1:], errors='coerce').dropna().astype(int)
         patient_ids = risk_values.index.tolist()
 
-        selected_features = df.drop(index=["Grade de risque IWGDF"], errors='ignore')
-        selected_features = selected_features.loc[:, patient_ids]
+        # Select number of clusters
+        k = st.slider("Number of clusters", 2, 6, 4)
 
-        features_df = selected_features.T.apply(pd.to_numeric, errors='coerce')  # ترنسپوز: ردیف‌ها بیماران
+        # Define clustering algorithms
+        clustering_algos = {
+            "Agglomerative (ward)": AgglomerativeClustering(n_clusters=k, linkage="ward"),
+            "Agglomerative (average)": AgglomerativeClustering(n_clusters=k, linkage="average"),
+            "KMeans": KMeans(n_clusters=k, random_state=42),
+            "Gaussian Mixture Model": GaussianMixture(n_components=k, random_state=42),
+        }
 
-        features_df["Grade de risque IWGDF"] = risk_values.reindex(features_df.index)
+        # Color map for clusters
+        color_map = {0: "green", 1: "blue", 2: "orange", 3: "red"}
 
-        df_A = features_df[features_df["Grade de risque IWGDF"].isin([0, 1])]
-        df_B = features_df[features_df["Grade de risque IWGDF"].isin([2, 3])]
+        # Marker map for IWGDF grades
+        marker_map = {0: 'o', 1: 's', 2: '^', 3: '*'}
 
-        def run_clustering(df_group, group_name):
-            st.subheader(f"Group {group_name} (n={df_group.shape[0]})")
+        def clean_column_name(name):
+            # Remove invalid characters and replace spaces with underscores
+            name = re.sub(r'[^\w\s]', '', name).strip().replace(' ', '_')
+            # Ensure name starts with a letter
+            if not name[0].isalpha():
+                name = 'p_' + name
+            return name
 
-            if df_group.shape[0] < 2:
-                st.warning("Not enough patients in this group.")
-                return None 
-
-            data = df_group.drop(columns=["Grade", "Group", "Grade de risque IWGDF"], errors="ignore").T
+        def prepare_data(include_grade=True):
+            params = important_params.copy()
+            if not include_grade:
+                params.pop(16, None)
             
-            # Drop features (rows) with >50% missing values (i.e., not enough patient data)
-            threshold = data.shape[1] * 0.5
+            selected_features = df.loc[list(params.keys())]
+            # Clean index names
+            cleaned_index = {k: clean_column_name(v) for k, v in params.items()}
+            selected_features.index = [cleaned_index[k] for k in selected_features.index]
+            selected_features = selected_features.loc[:, patient_ids]
+            features_df = selected_features.T.apply(pd.to_numeric, errors='coerce')
+            full_df = features_df.copy()
+            true_labels = risk_values.reindex(full_df.index)
             
-            data = data.loc[data.isnull().sum(axis=1) < threshold]
+            # Clean data
+            valid_features = full_df.isnull().sum() < full_df.shape[0] * 0.5
+            full_df_cleaned = full_df.loc[:, valid_features]
+            full_df_cleaned = full_df_cleaned.loc[:, full_df_cleaned.count() >= 20]
+            full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()), axis=0)
             
-            # Impute missing values with row-wise median
-            data = data.apply(lambda row: row.fillna(row.median()), axis=1)
+            if full_df_cleaned.shape[1] == 0 or full_df_cleaned.shape[0] < 2:
+                return None, None, None
             
-            # Keep only features (rows) with at least 20 valid patient values
-            data = data.loc[data.count(axis=1) >= 20]
-
-            features = data.T
-
-            st.write(f"Remaining features for clustering ({features.shape[1]} features):")
-            st.write(list(features.columns))
-
-            if features.shape[1] == 0:
-                st.error("No usable features after cleaning.")
-                return None
-
+            # Scale data
             scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(features)
+            X_scaled = scaler.fit_transform(full_df_cleaned)
+            
+            return X_scaled, full_df_cleaned, true_labels
 
-            k = st.slider(f"Number of clusters for Group {group_name}", 2, 6, 3, key=f"k_{group_name}")
-            linkage_method = st.selectbox(f"Linkage method for Group {group_name}",
-                                        ["ward", "complete", "average", "single"], key=f"linkage_{group_name}")
+        # Prepare data for both cases
+        X_scaled_with, full_df_cleaned_with, true_labels_with = prepare_data(include_grade=True)
+        X_scaled_without, full_df_cleaned_without, true_labels_without = prepare_data(include_grade=False)
 
-            if linkage_method == "ward" and X_scaled.shape[1] < 2:
-                st.warning("Ward linkage requires at least 2 features.")
-                return None
+        if X_scaled_with is None or X_scaled_without is None:
+            st.warning("Not enough valid data for clustering with important parameters.")
+            st.stop()
 
-            clustering = AgglomerativeClustering(n_clusters=k, linkage=linkage_method)
-            cluster_labels = clustering.fit_predict(X_scaled)
+        # Align indices
+        common_indices = full_df_cleaned_with.index.intersection(full_df_cleaned_without.index)
+        if len(common_indices) < 2:
+            st.warning("Not enough overlapping patients for clustering.")
+            st.stop()
 
-            df_group = df_group.copy()
-            df_group["Cluster"] = cluster_labels
+        X_scaled_with = X_scaled_with[full_df_cleaned_with.index.isin(common_indices)]
+        X_scaled_without = X_scaled_without[full_df_cleaned_without.index.isin(common_indices)]
+        true_labels = true_labels_with.loc[common_indices]
+        full_df_cleaned_with = full_df_cleaned_with.loc[common_indices]
+        full_df_cleaned_without = full_df_cleaned_without.loc[common_indices]
 
-            st.write(df_group[["Cluster", "Grade de risque IWGDF"]].head(10))
+        # Perform PCA for visualization
+        pca_with = PCA(n_components=2)
+        coords_with = pca_with.fit_transform(X_scaled_with)
+        pca_without = PCA(n_components=2)
+        coords_without = pca_without.fit_transform(X_scaled_without)
 
-            pca = PCA(n_components=2)
-            components = pca.fit_transform(X_scaled)
-            df_group["PCA1"] = components[:, 0]
-            df_group["PCA2"] = components[:, 1]
+        # Streamlit header and parameter display
+        st.markdown("""
+        The important parameters are:
+        - IWGDF Grade
+        - MESI
+        - Michigan Score
+        - Pressure
+        - Stiffness
+        - Thickness
+        - Amplitude
+        - Temperature
+        """)
+        
+        st.markdown("---")
+        st.caption("Agglomerative (ward): Hierarchically merges clusters by minimizing variance within clusters.")
+        st.caption("Agglomerative (average): Hierarchically merges clusters using average distance between points.")
+        st.caption("KMeans: Partitions data into k clusters by minimizing distance to cluster centroids.")
+        st.caption("Gaussian Mixture Model: Clusters data using probabilistic Gaussian distributions.")
+        st.markdown("---")
+        
+        metrics_with = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
+        metrics_without = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
+        feature_importance_dict_with = {}
+        feature_importance_dict_without = {}
+        confusion_matrices = {}
 
-            fig, ax = plt.subplots()
-            sns.scatterplot(data=df_group, x="PCA1", y="PCA2", hue="Cluster", palette="Set2", ax=ax)
-            ax.set_title(f"PCA projection – Group {group_name}")
-            st.pyplot(fig)
+        # Create subplots (2 columns: with grade, without grade)
+        n_algos = len(clustering_algos)
+        fig, axes = plt.subplots(n_algos, 2, figsize=(12, 5 * n_algos))
+        axes = axes.reshape(n_algos, 2) if n_algos > 1 else np.array([axes])
 
-            return df_group
+        # Function to calculate within-group inertia
+        def calculate_inertia(X, labels):
+            inertia = 0
+            for cluster in np.unique(labels):
+                cluster_points = X[labels == cluster]
+                if len(cluster_points) > 0:
+                    centroid = np.mean(cluster_points, axis=0)
+                    inertia += np.sum((cluster_points - centroid) ** 2)
+            return inertia
 
-        df_A_result = run_clustering(df_A, "A (Grade 0–1)")
-        df_B_result = run_clustering(df_B, "B (Grade 2–3)")
+        # Function to run clustering and plot
+        def run_clustering(X_scaled, full_df_cleaned, true_labels, coords, title_prefix, axes, col_idx, feature_importance_dict):
+            for idx, (name, algo) in enumerate(clustering_algos.items()):
+                if name.startswith("Agglomerative (ward)") and X_scaled.shape[1] < 2:
+                    st.warning(f"Ward linkage requires at least 2 features for {title_prefix}. Skipping.")
+                    continue
+                
+                # Perform clustering
+                labels = algo.fit_predict(X_scaled)
+                silhouette = silhouette_score(X_scaled, labels)
+                ch = calinski_harabasz_score(X_scaled, labels)
+                db = davies_bouldin_score(X_scaled, labels)
+                ari = adjusted_rand_score(true_labels, labels)
+                nmi = normalized_mutual_info_score(true_labels, labels)
+                
+                metrics = metrics_with if "With Grade" in title_prefix else metrics_without
+                metrics["Algorithm"].append(name)
+                metrics["Silhouette"].append(silhouette)
+                metrics["Calinski-Harabasz"].append(ch)
+                metrics["Davies-Bouldin"].append(db)
+                metrics["ARI"].append(ari)
+                metrics["NMI"].append(nmi)
+                
+                # Calculate confusion matrix (all IWGDF grades)
+                conf_matrix = confusion_matrix(true_labels, labels)
+                confusion_matrices[f"{title_prefix}_{name}"] = conf_matrix
+                
+                # Calculate feature importance
+                rf = RandomForestClassifier(random_state=42)
+                rf.fit(X_scaled, labels)
+                feature_importance_dict[name] = pd.Series(rf.feature_importances_, index=full_df_cleaned.columns)
+                
+                # Calculate mean and median per cluster
+                cluster_stats = full_df_cleaned.copy()
+                cluster_stats['Cluster'] = labels
+                mean_stats = cluster_stats.groupby('Cluster').mean()
+                median_stats = cluster_stats.groupby('Cluster').median()
+                
+                # Plot with cluster colors and grade markers
+                ax = axes[idx, col_idx]
+                for grade in sorted(true_labels.unique()):
+                    mask = true_labels == grade
+                    ax.scatter(
+                        coords[mask, 0], coords[mask, 1], 
+                        c=[color_map.get(lbl, "black") for lbl in labels[mask]], 
+                        marker=marker_map[grade], s=80, label=f"Grade {grade}"
+                    )
+                ax.set_title(f"{name} ({title_prefix})\nSilhouette={silhouette:.3f}, ARI={ari:.3f}, NMI={nmi:.3f}", fontsize=14, pad=20)
+                ax.set_xlabel("PCA1", fontsize=10)
+                ax.set_ylabel("PCA2", fontsize=10)
+                
+                # Create legends
+                grade_handles = [plt.Line2D([0], [0], marker=marker_map[grade], color='w', label=f"Grade {grade}", 
+                                            markerfacecolor='gray', markersize=10) 
+                                for grade in sorted(true_labels.unique())]
+                cluster_handles = [plt.Line2D([0], [0], marker='o', color='w', label=f"Cluster {i}", 
+                                            markerfacecolor=color_map.get(i, "black"), markersize=10) 
+                                for i in range(k)]
+                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
+                
+                # Store mean and median stats
+                cluster_stats_dict[f"{title_prefix}_{name}_mean"] = mean_stats
+                cluster_stats_dict[f"{title_prefix}_{name}_median"] = median_stats
 
-        # Combine results for comparison
-        df_combined["Cluster_with_Grade"] = np.nan
+        # Dictionary to store cluster stats
+        cluster_stats_dict = {}
 
-        if df_A_result is not None:
-            df_combined.loc[df_A_result.index, "Cluster_with_Grade"] = df_A_result["Cluster"]
-        if df_B_result is not None:
-            df_combined.loc[df_B_result.index, "Cluster_with_Grade"] = df_B_result["Cluster"]
+        # Run clustering for both cases
+        st.subheader("Clustering Comparison: With and Without IWGDF Grade")
+        run_clustering(X_scaled_with, full_df_cleaned_with, true_labels, coords_with, "With Grade", axes, 0, feature_importance_dict_with)
+        run_clustering(X_scaled_without, full_df_cleaned_without, true_labels, coords_without, "Without Grade", axes, 1, feature_importance_dict_without)
 
-        if "Cluster_without_Grade" in df_combined.columns and df_combined["Cluster_with_Grade"].notna().sum() > 1:
-            common = df_combined.dropna(subset=["Cluster_without_Grade", "Cluster_with_Grade"])
-            if len(common) > 1:
-                ari = adjusted_rand_score(common["Cluster_without_Grade"], common["Cluster_with_Grade"])
-                st.write(f"### Adjusted Rand Index (ARI) between clusterings:")
-                st.write(f"ARI = {ari:.3f}")
+        # Explicitly draw the figure to avoid internal state changes
+        fig.canvas.draw()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)  # Close figure to free memory
 
-                contingency = pd.crosstab(common["Cluster_without_Grade"], common["Cluster_with_Grade"])
-                st.write("### Contingency Table (Cluster_without_Grade vs Cluster_with_Grade):")
-                st.dataframe(contingency)
-            else:
-                st.warning("Not enough patients with both cluster labels to compare.")
-        else:
-            st.warning("Cluster labels missing for comparison.")
+        # Display metrics
+        st.write("### Clustering Metrics (With IWGDF Grade)")
+        metrics_df_with = pd.DataFrame(metrics_with).sort_values(by="Silhouette", ascending=False)
+        st.dataframe(metrics_df_with.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
+
+        st.write("### Clustering Metrics (Without IWGDF Grade)")
+        metrics_df_without = pd.DataFrame(metrics_without).sort_values(by="Silhouette", ascending=False)
+        st.dataframe(metrics_df_without.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
+
+        # Display confusion matrices in one figure
+        st.write("### Confusion Matrices (All IWGDF Grades vs Clusters)")
+        n_matrices = len(confusion_matrices)
+        n_rows = (n_matrices + 1) // 2  # Ceiling division to ensure enough rows
+        fig, axes = plt.subplots(n_rows, 2, figsize=(12, 5 * n_rows))
+        axes = axes.ravel() if n_matrices > 1 else [axes]
+        
+        for idx, (key, conf_matrix) in enumerate(confusion_matrices.items()):
+            if idx < len(axes):  # Ensure we don't access out-of-bounds axes
+                sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', ax=axes[idx])
+                axes[idx].set_title(key)
+                axes[idx].set_xlabel('Predicted Clusters')
+                axes[idx].set_ylabel('IWGDF Grades')
+        
+        # Hide any unused subplots
+        for idx in range(len(confusion_matrices), len(axes)):
+            axes[idx].set_visible(False)
+        
+        fig.canvas.draw()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)  # Close figure to free memory
+
+        # IWGDF Group Homogeneity Analysis
+        st.write("### IWGDF Group Homogeneity Analysis")
+        
+        # Calculate within-group inertia
+        inertia = calculate_inertia(X_scaled_without, true_labels)
+        st.write(f"Within-group inertia for IWGDF groups: {inertia:.3f}")
+        st.write("**Interpretation**: Within-group inertia measures the compactness of IWGDF groups. The value of 98.974 suggests moderate to high variability within grades, indicating that points within each IWGDF grade are relatively spread out from their centroid.")
+
+        # Check sample sizes per IWGDF grade
+        grade_counts = true_labels.value_counts().sort_index()
+        st.write("#### Sample Sizes per IWGDF Grade")
+        st.write(grade_counts)
+        st.write("**Note**: MANOVA requires sufficient samples per group (typically > number of features). If any grade has very few samples, results may be unreliable.")
+
+        # MANOVA with IWGDF grade as factor
+        st.write("#### MANOVA with IWGDF Grade as Factor")
+        manova_data = full_df_cleaned_without.copy()
+        manova_data['IWGDF'] = true_labels
+        formula = ' + '.join(full_df_cleaned_without.columns) + ' ~ IWGDF'
+        try:
+            manova = MANOVA.from_formula(formula, data=manova_data)
+            manova_result = manova.mv_test()
+            st.write("MANOVA Results:")
+            st.write(manova_result)
+            st.write("**Interpretation**: A p-value of 0 (or <0.001) across all test statistics (e.g., Pillai’s Trace, Wilks’ Lambda) indicates highly significant differences between IWGDF groups, suggesting they are well-separated in the multivariate parameter space. However, verify data quality (e.g., sufficient samples per group, no multicollinearity) to ensure reliability.")
+        except Exception as e:
+            st.warning(f"MANOVA failed: {str(e)}. Check data for sufficient samples, valid features, or multicollinearity.")
+
+        # Silhouette score for IWGDF labels as imposed clusters
+        silhouette_iwgdf = silhouette_score(X_scaled_without, true_labels)
+        st.write(f"Silhouette Score for IWGDF labels as imposed clusters: {silhouette_iwgdf:.3f}")
+        st.write("**Interpretation**: A low Silhouette Score (close to 0) indicates high overlap between IWGDF groups, suggesting poor separation. A higher score (>0.5) suggests well-defined groups.")
+
+        # Parameter Importance Analysis
+        st.write("### Parameter Importance Analysis")
+        
+        # LASSO Regression for automatic variable selection
+        st.write("#### Logistic Regression with LASSO Regularization")
+        try:
+            lasso = LogisticRegression(penalty='l1', solver='liblinear', random_state=42)
+            lasso.fit(X_scaled_without, true_labels)
+            lasso_importance = pd.Series(np.abs(lasso.coef_[0]), index=full_df_cleaned_without.columns)
+            lasso_importance = lasso_importance.sort_values(ascending=False).head(5)
+            st.write("LASSO regression allows automatic selection of the most predictive variables. Non-zero coefficients highlight key parameters for IWGDF grade prediction.")
+            lasso_df = pd.DataFrame({'Parameter': lasso_importance.index, 'Coefficient': lasso_importance.values})
+            st.dataframe(lasso_df)
+        except Exception as e:
+            st.warning(f"LASSO regression failed: {str(e)}. Check data for valid features or sufficient samples.")
+
+        # Random Forest Classifier for feature importance
+        st.write("#### Random Forest Classifier Feature Importance")
+        rf_classifier = RandomForestClassifier(random_state=42)
+        rf_classifier.fit(X_scaled_without, true_labels)
+        rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.columns)
+        rf_importance = rf_importance.sort_values(ascending=False).head(5)
+        st.write("Random Forest Classifier extracts the relative importance of variables in distinguishing IWGDF grades.")
+        rf_df = pd.DataFrame({'Parameter': rf_importance.index, 'Importance': rf_importance.values})
+        st.dataframe(rf_df)
+
+        # Univariate ANOVAs and Eta Squared
+        st.write("#### Univariate ANOVA with Eta Squared")
+        eta_squared = {}
+        for col in full_df_cleaned_without.columns:
+            groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
+            if all(len(g) > 0 for g in groups):
+                f_stat, p_value = f_oneway(*groups)
+                ss_total = np.sum((full_df_cleaned_without[col] - full_df_cleaned_without[col].mean())**2)
+                ss_between = sum(len(g) * (g.mean() - full_df_cleaned_without[col].mean())**2 for g in groups)
+                eta_squared[col] = ss_between / ss_total if ss_total > 0 else 0
+        eta_squared_df = pd.DataFrame.from_dict(eta_squared, orient='index', columns=['Eta Squared']).sort_values(by='Eta Squared', ascending=False).head(5)
+        st.write("Univariate ANOVAs calculate R² (eta squared) for each parameter, establishing a clear hierarchy of the most influential variables for IWGDF group differences.")
+        st.dataframe(eta_squared_df)
+
+        # Display feature importance from clustering
+        st.write("### Feature Importance (With IWGDF Grade)")
+        for algo_name, importance in feature_importance_dict_with.items():
+            st.write(f"#### {algo_name}")
+            top_features = importance.sort_values(ascending=False).head(5)
+            top_features_df = pd.DataFrame({'Parameter': top_features.index, 'Importance': top_features.values})
+            st.dataframe(top_features_df)
+
+        st.write("### Feature Importance (Without IWGDF Grade)")
+        for algo_name, importance in feature_importance_dict_without.items():
+            st.write(f"#### {algo_name}")
+            top_features = importance.sort_values(ascending=False).head(5)
+            top_features_df = pd.DataFrame({'Parameter': top_features.index, 'Importance': top_features.values})
+            st.dataframe(top_features_df)
+
+        # Display mean and median statistics
+        for algo_name in clustering_algos.keys():
+            if algo_name.startswith("Agglomerative (ward)") and (X_scaled_with.shape[1] < 2 or X_scaled_without.shape[1] < 2):
+                continue
+            st.write(f"#### Statistics for {algo_name}")
+            
+            st.write("**With IWGDF Grade**")
+            st.write("Mean Values per Cluster")
+            mean_key = f"With Grade_{algo_name}_mean"
+            if mean_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[mean_key].style.format("{:.2f}"))
+            
+            st.write("Median Values per Cluster")
+            median_key = f"With Grade_{algo_name}_median"
+            if median_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
+            
+            st.write("**Without IWGDF Grade**")
+            st.write("Mean Values per Cluster")
+            mean_key = f"Without Grade_{algo_name}_mean"
+            if mean_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[mean_key].style.format("{:.2f}"))
+            
+            st.write("Median Values per Cluster")
+            median_key = f"Without Grade_{algo_name}_median"
+            if mean_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
+
+        # Interpretation
+        st.markdown("""
+        ### Interpretation:
+        - **Clustering Visualization**:
+        - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star).
+        - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on biomechanical, vascular, and thermal parameters. Same color/symbol scheme for comparison.
+        - **Clustering Metrics**:
+        - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
+        - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
+        - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
+        - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
+        - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
+        - **Confusion Matrices**: Show alignment between IWGDF grades (0, 1, 2, 3) and cluster labels. High diagonal values indicate good correspondence; off-diagonal values suggest misalignments, potentially indicating limitations in IWGDF grading.
+        - **IWGDF Group Homogeneity**:
+        - **Within-group Inertia (98.974)**: Measures the compactness of IWGDF groups by summing the squared distances of points to their grade centroids. The value of 98.974 suggests moderate to high variability within IWGDF grades, indicating that points within each grade are relatively spread out. This relatively high inertia, combined with MANOVA and Silhouette Score results, suggests that IWGDF grades may not form highly compact groups, potentially due to heterogeneity within grades.
+        - **MANOVA (IWGDF Grade as Factor)**: A p-value of 0 (or <0.001) across all test statistics (e.g., Pillai’s Trace, Wilks’ Lambda) indicates highly significant differences between IWGDF groups, suggesting they are well-separated in the multivariate parameter space. However, such extreme significance should be validated by checking data quality, including sufficient samples per group (see sample sizes above) and absence of multicollinearity among features.
+        - **Silhouette Score for IWGDF Labels**: Calculated using IWGDF labels as imposed clusters. A low score (close to 0) indicates high overlap between groups, suggesting poor separation of IWGDF grades. A higher score (>0.5) suggests well-defined groups.
+        - **Parameter Importance**:
+        - **Logistic Regression with LASSO Regularization**: Allows automatic selection of the most predictive variables for IWGDF grades. Non-zero coefficients highlight key discriminators, with higher absolute values indicating stronger influence.
+        - **Random Forest Classifier**: Extracts the relative importance of variables in the classification of IWGDF grades or clusters. Higher importance scores indicate greater contribution.
+        - **Univariate ANOVAs with R² (Eta Squared)**: Performed after MANOVA to calculate R² (eta squared) for each parameter, establishing a clear hierarchy of the most influential variables for IWGDF group differences. Higher eta squared values indicate parameters explaining more variance between grades.
+        - **Key Insights**:
+        - The within-group inertia of 98.974 indicates moderate to high variability within IWGDF grades. If paired with a low Silhouette Score, it suggests overlapping or heterogeneous groups, questioning the homogeneity of IWGDF classifications.
+        - A MANOVA p-value of 0 indicates strong separation between IWGDF groups, but validation is needed to rule out data issues (e.g., small sample sizes or multicollinearity).
+        - Low ARI/NMI in the without-grade case suggests natural groupings may differ from IWGDF grades, potentially offering alternative stratifications.
+        - Parameters with high LASSO coefficients, Random Forest importance, or eta squared values are the most influential in differentiating groups, guiding clinical focus.
+        """)
 
     # ================================
-    # Grade  & Clustering
+    # Clustering with All Parameters
     # ================================
-    
-    elif analysis_type == "Grade  & Clustering":
-        st.subheader("🔎 Exploratory Clustering (without IWGDF grade)")
-
-        target_rows = {
-            6: "Date of Birth", 16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
-            35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-            59: "Michigan Score (ok=13, risk=0)", 72: "Michigan Score2 (ok=13, risk=0)",
+    elif analysis_type == "Clustering (All Parameters)":
+        st.header("Clustering with All Parameters")
+        important_params = {
+            6: "Date of Birth",
+            16: "Grade IWGDF",
+            17: "Height (m)", 18: "Weight (kg)", 19: "BMI",
+            24: "AOMI",
+            35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
+            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
+            59: "Michigan Score (ok=13, risk=0)",
+            72: "Michigan Score2 (ok=13, risk=0)",
             75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L",
             108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
             113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -1381,7 +1920,8 @@ if uploaded_file:
             138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
             142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
             146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
+            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
+            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
             158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
             161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
             164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
@@ -1390,197 +1930,397 @@ if uploaded_file:
             172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
             174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
             176: "Normalized Temperature R", 177: "Normalized Temperature L",
-            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
+            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L",
+            214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
         }
 
-        exclude_keys = [6, 16]
-        rows_to_use = [k for k in target_rows.keys() if k not in exclude_keys]
+        # Debug: Print analysis type
+        st.write(f"Current analysis type: {analysis_type}")
 
-        try:
-            st.title("IWGDF Risk Grade Clustering & Analysis")
+        # Extract IWGDF grades and patient IDs
+        risk_row = df.iloc[16]
+        risk_values = pd.to_numeric(risk_row[1:], errors='coerce').dropna().astype(int)
+        patient_ids = risk_values.index.tolist()
 
-            # Select feature rows and rename indices
-            df_selected = df.loc[rows_to_use, :].copy()
-            df_selected.index = [target_rows[i] for i in rows_to_use]
+        # Select number of clusters
+        k = st.slider("Number of clusters", 2, 6, 4)
 
-            # Transpose so patients = rows, features = columns
-            data = df_selected.T
-            data = data.apply(pd.to_numeric, errors='coerce')
+        # Define clustering algorithms
+        clustering_algos = {
+            "Agglomerative (ward)": AgglomerativeClustering(n_clusters=k, linkage="ward"),
+            "Agglomerative (average)": AgglomerativeClustering(n_clusters=k, linkage="average"),
+            "KMeans": KMeans(n_clusters=k, random_state=42),
+            "Gaussian Mixture Model": GaussianMixture(n_components=k, random_state=42),
+        }
 
-            # Extract Grade IWGDF row (index 16) if present for comparison
-            grade_series = None
-            if 16 in df.index:
-                grade_series = pd.to_numeric(df.loc[16, :], errors='coerce')
-                grade_series.name = "Grade IWGDF"
+        # Color map for clusters
+        color_map = {0: "green", 1: "blue", 2: "orange", 3: "red"}
 
-            # Filter out features with all NaNs
-            valid_columns = data.columns[data.notna().any()]
-            data_valid = data[valid_columns]
+        # Marker map for IWGDF grades
+        marker_map = {0: 'o', 1: 's', 2: '^', 3: '*'}
 
-            st.write(f"Number of variables used: {len(valid_columns)}")
+        def clean_column_name(name):
+            name = re.sub(r'[^\w\s]', '', name).strip().replace(' ', '_')
+            if not name[0].isalpha():
+                name = 'p_' + name
+            return name
 
-            # Impute missing values with mean
-            imputer = SimpleImputer(strategy='mean')
-            data_imputed_array = imputer.fit_transform(data_valid)
-
-            # Scale features
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(data_imputed_array)
-
-            if X_scaled.shape[0] < 10:
-                st.warning("Not enough patients for clustering (minimum 10 required).")
-                st.stop()
-
-            # Find best number of clusters by silhouette score
-            silhouette_scores = {}
-            for k in range(2, 7):
-                km = KMeans(n_clusters=k, random_state=42, n_init=10)
-                labels = km.fit_predict(X_scaled)
-                silhouette_scores[k] = silhouette_score(X_scaled, labels)
-
-            best_k = max(silhouette_scores, key=silhouette_scores.get)
-            st.success(f"Optimal number of clusters (Silhouette score): **{best_k}**")
-
-            # Final clustering
-            kmeans = KMeans(n_clusters=best_k, random_state=42, n_init=10)
-            clusters = kmeans.fit_predict(X_scaled)
-
-            # Create DataFrame with imputed data + cluster labels
-            data_imputed = pd.DataFrame(data_imputed_array, columns=valid_columns, index=data_valid.index)
-            data_imputed["Cluster"] = clusters
-
-            # Add Grade IWGDF if available (aligned by patient index)
-            if grade_series is not None:
-                grade_aligned = grade_series.reindex(data_imputed.index)
-                data_imputed["Grade IWGDF"] = grade_aligned
-
-            # PCA for visualization
-            pca = PCA(n_components=2)
-            X_pca = pca.fit_transform(X_scaled)
-            data_imputed["PC1"] = X_pca[:, 0]
-            data_imputed["PC2"] = X_pca[:, 1]
-
-            # Show cluster mean feature values
-            st.write("### 📊 Mean Feature Values by Cluster")
-            cluster_summary = data_imputed.groupby("Cluster").mean(numeric_only=True)
-            st.dataframe(cluster_summary.style.format("{:.2f}"))
-
-            # Show differences and significance tests between consecutive clusters
-            st.write("### 🔍 Differences & Statistical Tests Between Consecutive Clusters")
-            sorted_clusters = sorted(data_imputed["Cluster"].unique())
-
-            for i in range(len(sorted_clusters) - 1):
-                c1, c2 = sorted_clusters[i], sorted_clusters[i + 1]
-                group1 = data_imputed[data_imputed["Cluster"] == c1]
-                group2 = data_imputed[data_imputed["Cluster"] == c2]
-
-                delta = cluster_summary.loc[c2] - cluster_summary.loc[c1]
-                delta.name = f"{c1} → {c2}"
-
-                p_values = []
-                for var in cluster_summary.columns:
-                    vals1 = group1[var].dropna()
-                    vals2 = group2[var].dropna()
-                    if len(vals1) < 3 or len(vals2) < 3 or np.all(vals1 == vals1.iloc[0]) or np.all(vals2 == vals2.iloc[0]):
-                        p = np.nan
-                    else:
-                        try:
-                            _, p = ttest_ind(vals1, vals2, equal_var=False)
-                            if np.isnan(p) or np.isinf(p):
-                                raise ValueError
-                        except:
-                            try:
-                                _, p = mannwhitneyu(vals1, vals2, alternative="two-sided")
-                            except:
-                                p = np.nan
-                    p_values.append(p)
-
-                stats_df = pd.DataFrame({
-                    "Mean Difference": delta,
-                    "p-value": p_values
-                }, index=cluster_summary.columns)
-
-                stats_df = stats_df.sort_values(by="Mean Difference", key=lambda x: abs(x), ascending=False)
-
-                st.write(f"#### Cluster {c1} → {c2}")
-                st.dataframe(stats_df.style.format({"Mean Difference": "{:+.2f}", "p-value": "{:.2e}"}))
-
-                st.write("**Interpretation of top 5 differentiating parameters:**")
-                for param, row in stats_df.head(5).iterrows():
-                    diff_val = row["Mean Difference"]
-                    p_val = row["p-value"]
-                    signif = "significant" if (not np.isnan(p_val) and p_val < 0.05) else "not significant"
-                    direction = "increased" if diff_val > 0 else "decreased"
-                    st.markdown(f"- **{param}** : {direction} by {diff_val:+.2f} (p = {p_val:.2e}, {signif})")
-
-            # PCA scatter plot of clusters
-            st.write("### 🧭 PCA Projection of Clusters")
-            fig, ax = plt.subplots(figsize=(10, 6))
-            sns.scatterplot(data=data_imputed, x="PC1", y="PC2", hue="Cluster", palette="Set2", s=70, ax=ax)
-            ax.set_title("PCA Projection of Patients by Cluster")
-            st.pyplot(fig)
-
-            # Cluster vs IWGDF grade comparison
-            if grade_series is not None:
-                st.write("### 🧮 Cluster vs IWGDF grade comparison")
-
-                known = data_imputed.copy()
-                known["Grade IWGDF"] = pd.to_numeric(known["Grade IWGDF"], errors='coerce')
-                known = known.dropna(subset=["Grade IWGDF"])
-
-                if known.empty:
-                    st.warning("No patients with known numeric IWGDF grades for comparison.")
-                else:
-                    # Categorize grades finely
-                    def categorize_grade_fine(x):
-                        return f"Grade {int(x)}"
-
-                    known["IWGDF_Group"] = known["Grade IWGDF"].apply(categorize_grade_fine)
-
-                    contingency = pd.crosstab(known["Cluster"], known["IWGDF_Group"])
-                    st.dataframe(contingency)
-
-                    # Force run tests even if shape < 2x2
-                    try:
-                        chi2, p_chi, dof, expected = chi2_contingency(contingency, correction=False)
-                        st.markdown(f"**Chi-square test:** χ² = {chi2:.2f}, p = {p_chi:.4f}")
-
-                        n = contingency.values.sum()
-                        phi2 = chi2 / n if n > 0 else 0
-                        r, k = contingency.shape
-                        cramers_v = np.sqrt(phi2 / min(k - 1, r - 1)) if r > 1 and k > 1 else np.nan
-                        st.markdown(f"**Cramér’s V:** {cramers_v:.3f}" if not np.isnan(cramers_v) else "**Cramér’s V:** Not defined (single row or column)")
-
-                        if contingency.shape == (2, 2):
-                            oddsratio, p_fisher = fisher_exact(contingency)
-                            st.markdown(f"**Fisher's Exact test p-value:** {p_fisher:.4f}")
-                        else:
-                            st.info("Fisher's Exact test only for 2x2 tables.")
-                    except Exception as e:
-                        st.warning(f"⚠️ Statistical tests could not be performed reliably: {e}")
-
-                    st.write("### Interpretation:")
-                    st.markdown(
-                        """
-                        - **Note:** Statistical test results may be unreliable with very small or unbalanced groups.
-                        - Proceed with caution interpreting p-values and effect sizes.
-                        """
-                    )
-
-
-            # Export results button
-            buffer = BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                data_imputed.to_excel(writer, sheet_name="Clustered Data")
-                if grade_series is not None and not known.empty:
-                    contingency.to_excel(writer, sheet_name="Contingency Table")
-            buffer.seek(0)
-            st.download_button("📥 Download full results (Excel)", buffer.getvalue(), "iwgdf_clustering_analysis.xlsx")
-
-        except Exception as e:
-            st.error(f"⚠️ Error occurred: {e}")
+        def prepare_data(include_grade=True):
+            params = important_params.copy()
+            if not include_grade:
+                params.pop(16, None)
             
+            selected_features = df.loc[list(params.keys())]
+            cleaned_index = {k: clean_column_name(v) for k, v in params.items()}
+            selected_features.index = [cleaned_index[k] for k in selected_features.index]
+            selected_features = selected_features.loc[:, patient_ids]
+            
+            # Identify categorical columns
+            categorical_cols = [cleaned_index[k] for k in [24, 75, 76, 77, 78] if k in params]
+            numeric_cols = [col for col in selected_features.index if col not in categorical_cols]
+            
+            # Convert numeric columns
+            features_df = selected_features.loc[numeric_cols].T.apply(pd.to_numeric, errors='coerce')
+            
+            # Encode categorical columns
+            if categorical_cols:
+                cat_df = selected_features.loc[categorical_cols].T
+                cat_df_encoded = pd.get_dummies(cat_df, dummy_na=True)
+                features_df = pd.concat([features_df, cat_df_encoded], axis=1)
+            
+            full_df = features_df.copy()
+            true_labels = risk_values.reindex(full_df.index)
+            st.write(f"Initial number of features: {full_df.shape[1]}")
+            
+            # Clean data
+            valid_features = full_df.isnull().sum() < full_df.shape[0] * 0.5
+            full_df_cleaned = full_df.loc[:, valid_features]
+            st.write(f"Features after missing value filter: {full_df_cleaned.shape[1]}")
+            
+            full_df_cleaned = full_df_cleaned.loc[:, full_df_cleaned.count() >= 10]
+            full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()), axis=0)
+            
+            if full_df_cleaned.shape[1] == 0 or full_df_cleaned.shape[0] < 2:
+                return None, None, None
+            
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(full_df_cleaned)
+            
+            return X_scaled, full_df_cleaned, true_labels
 
+        # Prepare data for both cases
+        X_scaled_with, full_df_cleaned_with, true_labels_with = prepare_data(include_grade=True)
+        X_scaled_without, full_df_cleaned_without, true_labels_without = prepare_data(include_grade=False)
+
+        if X_scaled_with is None or X_scaled_without is None:
+            st.warning("Not enough valid data for clustering with all parameters.")
+            st.stop()
+
+        # Align indices
+        common_indices = full_df_cleaned_with.index.intersection(full_df_cleaned_without.index)
+        if len(common_indices) < 2:
+            st.warning("Not enough overlapping patients for clustering.")
+            st.stop()
+
+        X_scaled_with = X_scaled_with[full_df_cleaned_with.index.isin(common_indices)]
+        X_scaled_without = X_scaled_without[full_df_cleaned_without.index.isin(common_indices)]
+        true_labels = true_labels_with.loc[common_indices]
+        full_df_cleaned_with = full_df_cleaned_with.loc[common_indices]
+        full_df_cleaned_without = full_df_cleaned_without.loc[common_indices]
+
+        # Perform PCA for visualization
+        pca_with = PCA(n_components=2)
+        coords_with = pca_with.fit_transform(X_scaled_with)
+        st.write(f"Explained variance ratio (With Grade): {pca_with.explained_variance_ratio_}")
+        pca_without = PCA(n_components=2)
+        coords_without = pca_without.fit_transform(X_scaled_without)
+        st.write(f"Explained variance ratio (Without Grade): {pca_without.explained_variance_ratio_}")
+
+        # Streamlit header and parameter display
+        st.markdown("""
+        The parameters used for clustering are:
+        - IWGDF Grade
+        - Anthropometric (Height, Weight, BMI)
+        - AOMI
+        - MESI (Ankle Pressure, Big Toe Systolic Pressure Index)
+        - Michigan Score
+        - Charcot (Acute and Chronic)
+        - Amplitude (Dorsiflexion, Talo-crural)
+        - Pressure (Max SESA, HALLUX, TM5)
+        - Stiffness (SESA, HALLUX, TM5)
+        - Ultrasound Thickness (Epidermis, Hypodermis, Total Tissue)
+        - ROC (SESA, HALLUX, TM5)
+        - Temperature (Foot regions, Hand-Foot Differences, Normalized)
+        - SUDOSCAN (Hand and Foot)
+        """)
+        
+        st.markdown("---")
+        st.caption("Agglomerative (ward): Hierarchically merges clusters by minimizing variance within clusters.")
+        st.caption("Agglomerative (average): Hierarchically merges clusters using average distance between points.")
+        st.caption("KMeans: Partitions data into k clusters by minimizing distance to cluster centroids.")
+        st.caption("Gaussian Mixture Model: Clusters data using probabilistic Gaussian distributions.")
+        st.markdown("---")
+        
+        # Corrected dictionary initialization
+        metrics_with = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
+        metrics_without = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
+        feature_importance_dict_with = {}
+        feature_importance_dict_without = {}
+        confusion_matrices = {}
+
+        # Create subplots (2 columns: with grade, without grade)
+        n_algos = len(clustering_algos)
+        fig, axes = plt.subplots(n_algos, 2, figsize=(12, 5 * n_algos))
+        axes = axes.reshape(n_algos, 2) if n_algos > 1 else np.array([axes])
+
+        # Function to calculate within-group inertia
+        def calculate_inertia(X, labels):
+            inertia = 0
+            for cluster in np.unique(labels):
+                cluster_points = X[labels == cluster]
+                if len(cluster_points) > 0:
+                    centroid = np.mean(cluster_points, axis=0)
+                    inertia += np.sum((cluster_points - centroid) ** 2)
+            return inertia
+
+        # Function to run clustering and plot
+        def run_clustering(X_scaled, full_df_cleaned, true_labels, coords, title_prefix, axes, col_idx, feature_importance_dict):
+            for idx, (name, algo) in enumerate(clustering_algos.items()):
+                if name.startswith("Agglomerative (ward)") and X_scaled.shape[1] < 2:
+                    st.warning(f"Ward linkage requires at least 2 features for {title_prefix}. Skipping.")
+                    continue
+                
+                # Perform clustering
+                labels = algo.fit_predict(X_scaled)
+                silhouette = silhouette_score(X_scaled, labels)
+                ch = calinski_harabasz_score(X_scaled, labels)
+                db = davies_bouldin_score(X_scaled, labels)
+                ari = adjusted_rand_score(true_labels, labels)
+                nmi = normalized_mutual_info_score(true_labels, labels)
+                
+                metrics = metrics_with if "With Grade" in title_prefix else metrics_without
+                metrics["Algorithm"].append(name)
+                metrics["Silhouette"].append(silhouette)
+                metrics["Calinski-Harabasz"].append(ch)
+                metrics["Davies-Bouldin"].append(db)
+                metrics["ARI"].append(ari)
+                metrics["NMI"].append(nmi)
+                
+                # Calculate confusion matrix
+                conf_matrix = confusion_matrix(true_labels, labels)
+                confusion_matrices[f"{title_prefix}_{name}"] = conf_matrix
+                
+                # Calculate feature importance
+                rf = RandomForestClassifier(random_state=42)
+                rf.fit(X_scaled, labels)
+                feature_importance_dict[name] = pd.Series(rf.feature_importances_, index=full_df_cleaned.columns)
+                
+                # Calculate mean and median per cluster
+                cluster_stats = full_df_cleaned.copy()
+                cluster_stats['Cluster'] = labels
+                mean_stats = cluster_stats.groupby('Cluster').mean()
+                median_stats = cluster_stats.groupby('Cluster').median()
+                
+                # Plot with cluster colors and grade markers
+                ax = axes[idx, col_idx]
+                for grade in sorted(true_labels.unique()):
+                    mask = true_labels == grade
+                    ax.scatter(
+                        coords[mask, 0], coords[mask, 1], 
+                        c=[color_map.get(lbl, "black") for lbl in labels[mask]], 
+                        marker=marker_map[grade], s=80, label=f"Grade {grade}"
+                    )
+                ax.set_title(f"{name} ({title_prefix})\nSilhouette={silhouette:.3f}, ARI={ari:.3f}, NMI={nmi:.3f}", fontsize=14, pad=20)
+                ax.set_xlabel("PCA1", fontsize=10)
+                ax.set_ylabel("PCA2", fontsize=10)
+                
+                # Create legends
+                grade_handles = [plt.Line2D([0], [0], marker=marker_map[grade], color='w', label=f"Grade {grade}", 
+                                            markerfacecolor='gray', markersize=10) 
+                                for grade in sorted(true_labels.unique())]
+                cluster_handles = [plt.Line2D([0], [0], marker='o', color='w', label=f"Cluster {i}", 
+                                            markerfacecolor=color_map.get(i, "black"), markersize=10) 
+                                for i in range(k)]
+                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
+                
+                # Store mean and median stats
+                cluster_stats_dict[f"{title_prefix}_{name}_mean"] = mean_stats
+                cluster_stats_dict[f"{title_prefix}_{name}_median"] = median_stats
+
+        # Dictionary to store cluster stats
+        cluster_stats_dict = {}
+
+        # Run clustering for both cases
+        st.subheader("Clustering Comparison: With and Without IWGDF Grade")
+        run_clustering(X_scaled_with, full_df_cleaned_with, true_labels, coords_with, "With Grade", axes, 0, feature_importance_dict_with)
+        run_clustering(X_scaled_without, full_df_cleaned_without, true_labels, coords_without, "Without Grade", axes, 1, feature_importance_dict_without)
+
+        # Explicitly draw the figure
+        fig.canvas.draw()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+        # Display metrics
+        st.write("### Clustering Metrics (With IWGDF Grade)")
+        metrics_df_with = pd.DataFrame(metrics_with).sort_values(by="Silhouette", ascending=False)
+        st.dataframe(metrics_df_with.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
+
+        st.write("### Clustering Metrics (Without IWGDF Grade)")
+        metrics_df_without = pd.DataFrame(metrics_without).sort_values(by="Silhouette", ascending=False)
+        st.dataframe(metrics_df_without.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
+
+        # Display confusion matrices
+        st.write("### Confusion Matrices (All IWGDF Grades vs Clusters)")
+        n_matrices = len(confusion_matrices)
+        n_rows = (n_matrices + 1) // 2
+        fig, axes = plt.subplots(n_rows, 2, figsize=(12, 5 * n_rows))
+        axes = axes.ravel() if n_matrices > 1 else [axes]
+        
+        for idx, (key, conf_matrix) in enumerate(confusion_matrices.items()):
+            if idx < len(axes):
+                sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', ax=axes[idx])
+                axes[idx].set_title(key)
+                axes[idx].set_xlabel('Predicted Clusters')
+                axes[idx].set_ylabel('IWGDF Grades')
+        
+        for idx in range(len(confusion_matrices), len(axes)):
+            axes[idx].set_visible(False)
+        
+        fig.canvas.draw()
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+        # IWGDF Group Homogeneity Analysis
+        st.write("### IWGDF Group Homogeneity Analysis")
+
+        inertia = calculate_inertia(X_scaled_without, true_labels)
+        st.write(f"Within-group inertia for IWGDF groups: {inertia:.3f}")
+        st.write("**Interpretation**: Within-group inertia measures the compactness of IWGDF groups. Lower values indicate tighter clusters.")
+
+        grade_counts = true_labels.value_counts().sort_index()
+        st.write("#### Sample Sizes per IWGDF Grade")
+        st.write(grade_counts)
+        st.write("**Note**: MANOVA requires sufficient samples per group (typically > number of features).")
+
+        # MANOVA with IWGDF Grade as Factor
+        st.write("#### MANOVA with IWGDF Grade as Factor")
+        manova_data = full_df_cleaned_without.copy()
+        manova_data['IWGDF'] = true_labels
+
+        # Clean column names for MANOVA formula
+        def clean_manova_column_name(name):
+            # Remove invalid characters, replace spaces with underscores, ensure starts with letter
+            name = re.sub(r'[^\w\s]', '', name).strip().replace(' ', '_')
+            if not name[0].isalpha():
+                name = 'p_' + name
+            return name
+
+        # Apply cleaning to column names
+        manova_data.columns = [clean_manova_column_name(col) if col != 'IWGDF' else col for col in manova_data.columns]
+
+        # Check for sufficient data
+        n_features = manova_data.shape[1] - 1  # Exclude 'IWGDF'
+        n_samples_per_group = manova_data.groupby('IWGDF').size()
+        min_samples = n_samples_per_group.min()
+
+        if min_samples <= n_features:
+            st.warning(f"MANOVA may be unreliable: smallest group size ({min_samples}) is not greater than number of features ({n_features}).")
+        elif min_samples < 2:
+            st.warning("MANOVA failed: At least one IWGDF group has fewer than 2 samples.")
+        else:
+            try:
+                # Construct formula with cleaned column names
+                formula = ' + '.join([col for col in manova_data.columns if col != 'IWGDF']) + ' ~ IWGDF'
+                st.write(f"MANOVA formula: {formula}")
+                manova = MANOVA.from_formula(formula, data=manova_data)
+                manova_result = manova.mv_test()
+                st.write("MANOVA Results:")
+                st.write(manova_result)
+                st.write("**Interpretation**: A p-value < 0.05 across test statistics (e.g., Pillai’s Trace, Wilks’ Lambda) indicates significant differences between IWGDF groups.")
+            except Exception as e:
+                st.warning(f"MANOVA failed: {str(e)}. Possible causes: invalid column names, insufficient samples, multicollinearity, or non-numeric data.")
+                st.write("Column names used:", list(manova_data.columns))
+                st.write("Data types:", manova_data.dtypes)
+                st.write("Sample sizes per group:", n_samples_per_group)
+
+        silhouette_iwgdf = silhouette_score(X_scaled_without, true_labels)
+        st.write(f"Silhouette Score for IWGDF labels: {silhouette_iwgdf:.3f}")
+        st.write("**Interpretation**: Higher scores (>0.5) indicate well-separated groups.")
+
+        # Parameter Importance Analysis
+        st.write("### Parameter Importance Analysis")
+        
+        st.write("#### Logistic Regression with LASSO Regularization")
+        try:
+            lasso = LogisticRegression(penalty='l1', solver='liblinear', random_state=42)
+            lasso.fit(X_scaled_without, true_labels)
+            lasso_importance = pd.Series(np.abs(lasso.coef_[0]), index=full_df_cleaned_without.columns)
+            lasso_importance = lasso_importance.sort_values(ascending=False).head(5)
+            st.dataframe(pd.DataFrame({'Parameter': lasso_importance.index, 'Coefficient': lasso_importance.values}))
+        except Exception as e:
+            st.warning(f"LASSO regression failed: {str(e)}.")
+
+        st.write("#### Random Forest Classifier Feature Importance")
+        rf_classifier = RandomForestClassifier(random_state=42)
+        rf_classifier.fit(X_scaled_without, true_labels)
+        rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.columns)
+        rf_importance = rf_importance.sort_values(ascending=False).head(5)
+        st.dataframe(pd.DataFrame({'Parameter': rf_importance.index, 'Importance': rf_importance.values}))
+
+        st.write("#### Univariate ANOVA with Eta Squared")
+        eta_squared = {}
+        for col in full_df_cleaned_without.columns:
+            groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
+            if all(len(g) > 0 for g in groups):
+                f_stat, p_value = f_oneway(*groups)
+                ss_total = np.sum((full_df_cleaned_without[col] - full_df_cleaned_without[col].mean())**2)
+                ss_between = sum(len(g) * (g.mean() - full_df_cleaned_without[col].mean())**2 for g in groups)
+                eta_squared[col] = ss_between / ss_total if ss_total > 0 else 0
+        eta_squared_df = pd.DataFrame.from_dict(eta_squared, orient='index', columns=['Eta Squared']).sort_values(by='Eta Squared', ascending=False).head(5)
+        st.dataframe(eta_squared_df)
+
+        # Display feature importance from clustering
+        st.write("### Feature Importance (With IWGDF Grade)")
+        for algo_name, importance in feature_importance_dict_with.items():
+            st.write(f"#### {algo_name}")
+            top_features = importance.sort_values(ascending=False).head(5)
+            st.dataframe(pd.DataFrame({'Parameter': top_features.index, 'Importance': top_features.values}))
+
+        st.write("### Feature Importance (Without IWGDF Grade)")
+        for algo_name, importance in feature_importance_dict_without.items():
+            st.write(f"#### {algo_name}")
+            top_features = importance.sort_values(ascending=False).head(5)
+            st.dataframe(pd.DataFrame({'Parameter': top_features.index, 'Importance': top_features.values}))
+
+        # Display mean and median statistics
+        for algo_name in clustering_algos.keys():
+            if algo_name.startswith("Agglomerative (ward)") and (X_scaled_with.shape[1] < 2 or X_scaled_without.shape[1] < 2):
+                continue
+            st.write(f"#### Statistics for {algo_name}")
+            
+            st.write("**With IWGDF Grade**")
+            st.write("Mean Values per Cluster")
+            mean_key = f"With Grade_{algo_name}_mean"
+            if mean_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[mean_key].style.format("{:.2f}"))
+            
+            st.write("Median Values per Cluster")
+            median_key = f"With Grade_{algo_name}_median"
+            if median_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
+            
+            st.write("**Without IWGDF Grade**")
+            st.write("Mean Values per Cluster")
+            mean_key = f"Without Grade_{algo_name}_mean"
+            if mean_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[mean_key].style.format("{:.2f}"))
+            
+            st.write("Median Values per Cluster")
+            median_key = f"Without Grade_{algo_name}_median"
+            if mean_key in cluster_stats_dict:
+                st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
     # ================================
     # 📌 Correlation Between Key Parameters
     # ================================
@@ -1593,8 +2333,9 @@ if uploaded_file:
             59: "Michigan Score(ok=13, risque=0)", 72: "Michigan Score2(ok=13, risque=0)", 
             75: "Medical history of acute Charcot R",76: "Medical history of acute Charcot L",
             77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R",
-            97: "ROM Ankle L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
+            94: "Amplitude of dorsiflexion of right MTP1 R",
+            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
+            97: "Amplitude talo-crurale L", 108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
             110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
             114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
             118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
@@ -1727,74 +2468,6 @@ if uploaded_file:
                     st.pyplot(fig6)
                     st.markdown(f"ℹ️ **Correlogram Explanation:** Heatmap showing only strong correlations (absolute value > 0.7). Helps identify highly related parameter pairs.")
 
-
-
-
-    # =====================================================
-    # Intra-Group Comparison
-    # =====================================================
-    elif analysis_type == "Intra-Group Comparison":
-        st.header("📈 Intra-Group Comparison")
-
-        selected_group = st.radio("Choose a group for intra-group comparison:", ["A (Grades 0-1)", "B (Grades 2-3)"])
-        g1, g2 = (0, 1) if selected_group == "A (Grades 0-1)" else (2, 3)
-
-        sub1 = df_combined[df_combined["Grade"] == g1]
-        sub2 = df_combined[df_combined["Grade"] == g2]
-
-        st.markdown(f"- **Group**: {selected_group} — comparing Grade {g1} vs Grade {g2}")
-        st.markdown(f"- Grade {g1}: {len(sub1)} patients | Grade {g2}: {len(sub2)} patients")
-
-        for col in df_combined.columns[:-2]:
-            values1 = pd.to_numeric(sub1[col], errors='coerce').dropna()
-            values2 = pd.to_numeric(sub2[col], errors='coerce').dropna()
-
-            st.write(f"### 🔹 {col}")
-            st.write(f"Grade {g1} - count: {len(values1)}, Grade {g2} - count: {len(values2)}")
-
-            # Shapiro normality check
-            if len(values1) >= 3:
-                p_shapiro1 = shapiro(values1)[1]
-                st.write(f"Shapiro Grade {g1}: p = {p_shapiro1:.4f}")
-            else:
-                st.write(f"Shapiro Grade {g1}: ❌ Not enough data (min 3)")
-
-            if len(values2) >= 3:
-                p_shapiro2 = shapiro(values2)[1]
-                st.write(f"Shapiro Grade {g2}: p = {p_shapiro2:.4f}")
-            else:
-                st.write(f"Shapiro Grade {g2}: ❌ Not enough data (min 3)")
-
-            # Always do Mann-Whitney
-            stat, pval = mannwhitneyu(values1, values2, alternative='two-sided')
-            st.write(f"**Mann–Whitney U test**: p = `{pval:.4f}`")
-            st.divider()
-
-
-            group_a = df_combined[df_combined["Group"] == "A (Grades 0-1)"]
-            group_b = df_combined[df_combined["Group"] == "B (Grades 2-3)"]
-
-            for col in df_combined.columns[:-2]:
-                values_a = pd.to_numeric(group_a[col], errors='coerce').dropna()
-                values_b = pd.to_numeric(group_b[col], errors='coerce').dropna()
-
-                if len(values_a) < 3 or len(values_b) < 3:
-                    st.write(f"**{col}** – ❗ Not enough data (min 3 per group).")
-                    continue
-
-                is_norm_a = shapiro(values_a)[1] > 0.05
-                is_norm_b = shapiro(values_b)[1] > 0.05
-
-                if is_norm_a and is_norm_b:
-                    stat, pval = ttest_ind(values_a, values_b, equal_var=False)
-                    test_type = "Independent t-test"
-                else:
-                    stat, pval = mannwhitneyu(values_a, values_b, alternative='two-sided')
-                    test_type = "Mann–Whitney U"
-
-                st.markdown(f"**{col}** — {test_type}, p = `{pval:.4f}`")
-                
-
     # ================================
     # Bland-Altman Plots by Parameter and Side
     # ================================
@@ -1816,7 +2489,6 @@ if uploaded_file:
             138: "US Épaisseur Hypoderme SESA G", 139: "US Épaisseur Hypoderme HALLUX G", 140: "US Épaisseur Hypoderme TM5 G"
         }
 
-
         parameter_groups = {
             "Durometre [Hardness]": durometre_rows,
             "US Épaisseur ED [Epiderm + Derm] (mm)": us_epaisseur_ed_rows,
@@ -1827,7 +2499,9 @@ if uploaded_file:
             mean = (data1 + data2) / 2
             diff = data1 - data2
             md = np.mean(diff)
-            sd = np.std(diff)
+            sd = np.std(diff)  # SDr
+
+            st.markdown(f"**➕ SDr (SD of Differences) for {title}:** {sd:.3f} {unit}")
 
             fig, ax = plt.subplots(figsize=(6, 4))
             ax.scatter(mean, diff, alpha=0.5)
@@ -1841,30 +2515,78 @@ if uploaded_file:
             ax.grid(True)
             return fig
 
+        df_numeric = df.T.apply(pd.to_numeric, errors='coerce')
+
+        zones = ["SESA", "HALLUX", "TM5"]
+
         for group_name, rows in parameter_groups.items():
             st.markdown(f"### 📁 {group_name}")
+
             selected = df.loc[list(rows.keys()), 1:]
             selected.index = [rows[i] for i in rows.keys()]
             selected = selected.T.apply(pd.to_numeric, errors='coerce')
+            all_diffs_pooled = []
 
-            zones = ["SESA", "HALLUX", "TM5"]
+
             for zone in zones:
                 col_d = [col for col in selected.columns if zone in col and " D" in col]
                 col_g = [col for col in selected.columns if zone in col and " G" in col]
+
                 if col_d and col_g:
                     col_d = col_d[0]
                     col_g = col_g[0]
+
                     data_d = selected[col_d].dropna()
                     data_g = selected[col_g].dropna()
+
                     min_len = min(len(data_d), len(data_g))
-                    fig = plot_bland_altman(
-                        data_d[:min_len],
-                        data_g[:min_len],
+                    data_d = data_d[:min_len]
+                    data_g = data_g[:min_len]
+
+                    diffs = data_d - data_g
+                    all_diffs_pooled.extend(diffs.values)
+
+                    fig = plot_bland_altman(data_d, data_g,
                         title=f"{zone} - Right (D) vs Left (G)",
                         unit=group_name.split("(")[-1].replace(")", "") if "(" in group_name else ""
                     )
                     st.pyplot(fig)
 
+                    sdr_zone = np.std(diffs)
+                    st.markdown(f"**SDr pooled for {zone}:** {sdr_zone:.3f} {group_name.split('(')[-1].replace(')', '') if '(' in group_name else ''}")
+
+            if all_diffs_pooled:
+                all_diffs_pooled = np.array(all_diffs_pooled)
+                overall_sdr = np.std(all_diffs_pooled)
+                st.markdown(f"### 🔷 Overall pooled SDr for {group_name}: {overall_sdr:.3f} {group_name.split('(')[-1].replace(')', '') if '(' in group_name else ''}")
+
+                all_right = []
+                all_left = []
+                for zone in zones:
+                    col_d = [col for col in selected.columns if zone in col and " D" in col]
+                    col_g = [col for col in selected.columns if zone in col and " G" in col]
+                    if col_d and col_g:
+                        col_d = col_d[0]
+                        col_g = col_g[0]
+                        d_vals = selected[col_d].dropna()
+                        g_vals = selected[col_g].dropna()
+                        min_len = min(len(d_vals), len(g_vals))
+                        all_right.extend(d_vals[:min_len])
+                        all_left.extend(g_vals[:min_len])
+
+                all_right = np.array(all_right)
+                all_left = np.array(all_left)
+
+                if len(all_right) > 0 and len(all_left) > 0:
+                    fig_pooled = plot_bland_altman(
+                        all_right,
+                        all_left,
+                        title=f"Pooled Left vs Right - {group_name}",
+                        unit=group_name.split("(")[-1].replace(")", "") if "(" in group_name else ""
+                    )
+                    st.pyplot(fig_pooled)
+                
+                
     # ================================
     # Bland-Altman Pooled Plots for all parameters
     # ================================
@@ -1938,366 +2660,7 @@ if uploaded_file:
         df_table = pd.DataFrame(table_data, columns=["Parameter", "Mean", "Mean Difference", "±1.96 SD"])
         st.markdown("### 📋 Statistical Summary Table")
         st.dataframe(df_table)
-
-   
-   
-   
-    elif analysis_type == "Multivariate Group  (MANOVA)":
-        st.header("📊 MANOVA: Global Comparison Across Grades")
-
-        df_combined = df_combined.rename(columns=lambda x: str(x).replace(" ", "_").replace("-", "_"))
-
-        # Select features for MANOVA
-        features = st.multiselect("Select features for MANOVA:", df_combined.select_dtypes(include=[np.number]).columns.tolist(), default=df_combined.select_dtypes(include=[np.number]).columns[:5].tolist())
-        group_col = "Group"
-
-        if len(features) >= 2:
-            from statsmodels.multivariate.manova import MANOVA
-
-            # Prepare data
-            df_manova = df_combined[[group_col] + features].dropna()
-            df_manova[group_col] = df_manova[group_col].astype(str)
-
-            # MANOVA
-            formula = f"{' + '.join(features)} ~ {group_col}"
-            maov = MANOVA.from_formula(formula, data=df_manova)
-            st.text(maov.mv_test())
-        else:
-            st.warning("Please select at least 2 features for MANOVA.")
-            
-            
-            
-            
-
-    # ================================
-    # 📊 Multivariate & Predictive Analysis
-    # ================================
-    elif analysis_type == "Multivariate Group Comparison (MANOVA)":
-        st.header("📊 MANOVA: Comparing Parameters Between IWGDF Risk Groups")
-
-        target_rows = {
-            6: "Date of Birth", 16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
-            35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-            59: "Michigan Score (ok=13, risk=0)", 72: "Michigan Score2 (ok=13, risk=0)",
-            75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
-            77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-            94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
-            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
-            113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
-            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
-            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-            126: "US Thickness ED SESA R", 127: "US Thickness ED HALLUX R", 128: "US Thickness ED TM5 R",
-            130: "US Thickness ED SESA L", 131: "US Thickness ED HALLUX L", 132: "US Thickness ED TM5 L",
-            134: "US Thickness Hypodermis SESA R", 135: "US Thickness Hypodermis HALLUX R", 136: "US Thickness Hypodermis TM5 R",
-            138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
-            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
-            146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-            158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
-            161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
-            164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
-            167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L", 169: "Temperature Heel L",
-            170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
-            172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
-            174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
-            176: "Normalized Temperature R", 177: "Normalized Temperature L",
-            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
-        }
-
-
-        label_risk = "Grade de risque IWGDF"
-        row_risk = df[df[0].astype(str).str.strip().str.lower() == label_risk.lower()]
-
-        if row_risk.empty:
-            st.error(f"Label '{label_risk}' not found in the Excel sheet.")
-            st.stop()
-
-        idx_risk = row_risk.index[0]
-        risk_values = pd.to_numeric(df.iloc[idx_risk, 1:], errors='coerce').dropna().astype(int)
-        patient_ids = pd.Series(range(1, len(risk_values) + 1), index=risk_values.index)
-
-        selected_indices = list(target_rows.keys())
-        selected_labels = [target_rows[i] for i in selected_indices]
-        data = df.loc[selected_indices, risk_values.index + 1]
-        data.index = selected_labels
-        df_selected = data.T.apply(pd.to_numeric, errors='coerce')
-
-        # Add Grade and Group columns
-        df_selected["Grade"] = risk_values.values
-        df_selected["Group"] = df_selected["Grade"].apply(lambda x: "A (0-1)" if x in [0, 1] else "B (2-3)")
-
-        # Impute missing values with column means (excluding Group and Grade)
-        cols_to_impute = df_selected.columns.difference(["Grade", "Group"])
-        df_selected[cols_to_impute] = df_selected[cols_to_impute].apply(lambda col: col.fillna(col.mean()), axis=0)
-
-        # Remove columns with no variance (constant or empty)
-        df_selected = df_selected.loc[:, df_selected.nunique(dropna=True) > 1]
-
-        if "Group" not in df_selected.columns or df_selected["Group"].nunique() < 2:
-            st.warning("⚠️ Not enough valid groups for MANOVA.")
-        else:
-            # Clean column names for formula compatibility
-            def safe_colname(col):
-                return (
-                    col.replace(" ", "_")
-                    .replace("(", "")
-                    .replace(")", "")
-                    .replace("-", "_")
-                    .replace("=", "")
-                    .replace(",", "")
-                    .replace(".", "")
-                    .replace("°", "")
-                    .replace("/", "_")
-                )
-
-            df_renamed = df_selected.rename(columns={col: safe_colname(col) for col in df_selected.columns})
-            dependent_vars = [col for col in df_renamed.columns if col not in ["Group", "Grade"]]
-
-            formula = f"{' + '.join(dependent_vars)} ~ Group"
-
-            try:
-                from statsmodels.multivariate.manova import MANOVA
-                manova = MANOVA.from_formula(formula, data=df_renamed)
-                st.subheader("📍 MANOVA Results (Group A vs B)")
-                res = manova.mv_test()
-                st.text(res)
-
-                # -------- Interpretation --------
-                st.markdown("### 📋 Interpretation:")
-                wilks_p = None
-                for test_name, test_res in res.results.items():
-                    if "Wilks' lambda" in test_res:
-                        wilks_p = test_res["Wilks' lambda"]["Pr > F"]
-                        break
-                if wilks_p is not None:
-                    if wilks_p < 0.05:
-                        st.success(f"The MANOVA indicates a significant difference between risk groups (p = {wilks_p:.4f}).")
-                    else:
-                        st.info(f"No significant difference between risk groups was found (p = {wilks_p:.4f}).")
-                else:
-                    st.warning("Could not find Wilks' lambda p-value for interpretation.")
-
-                # -------- Boxplots --------
-                import matplotlib.pyplot as plt
-                import seaborn as sns
-
-                st.subheader("📊 Boxplots of Parameters by Group")
-                for var in dependent_vars:
-                    fig, ax = plt.subplots(figsize=(6, 4))
-                    sns.boxplot(x="Group", y=var, data=df_renamed, ax=ax, palette="Set2")
-                    ax.set_title(f"Distribution of {var} by Group")
-                    ax.set_xlabel("Risk Group")
-                    ax.set_ylabel(var)
-                    st.pyplot(fig)
-
-                # -------- Violin plots --------
-                st.subheader("🎻 Violin Plots of Parameters by Group")
-                for var in dependent_vars:
-                    fig, ax = plt.subplots(figsize=(6, 4))
-                    sns.violinplot(x="Group", y=var, data=df_renamed, ax=ax, palette="Set3")
-                    ax.set_title(f"Violin Plot of {var} by Group")
-                    ax.set_xlabel("Risk Group")
-                    ax.set_ylabel(var)
-                    st.pyplot(fig)
-
-                # Let user select variables for pairplot and heatmap
-                selected_vars = st.multiselect(
-                    "Select parameters for pairplot and correlation heatmap:",
-                    options=dependent_vars,
-                    default=dependent_vars[:6]  # default to first 6 variables
-                )
-
-                if selected_vars:
-                    st.subheader("🔎 Pairplot of Selected Variables")
-                    pairplot_fig = sns.pairplot(df_renamed, vars=selected_vars, hue="Group", palette="Set1")
-                    st.pyplot(pairplot_fig)
-
-                    st.subheader("📈 Correlation Heatmap of Selected Variables")
-                    corr = df_renamed[selected_vars].corr()
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    sns.heatmap(corr, annot=True, cmap="coolwarm", ax=ax)
-                    st.pyplot(fig)
-                else:
-                    st.info("Please select at least one parameter to show the plots.")
-
-                # -------- Pairplot --------
-                vars_for_pairplot = dependent_vars[:]  # select first 6 vars (adjust as needed)
-                st.subheader("🔎 Pairplot of Selected Variables")
-                pairplot_fig = sns.pairplot(df_renamed, vars=vars_for_pairplot, hue="Group", palette="Set1")
-                st.pyplot(pairplot_fig)
-
-                # -------- Correlation Heatmap with threshold --------
-                st.subheader("📈 Correlation Heatmap of Selected Variables (|corr| > 0.7)")
-
-                corr = df_renamed[vars_for_pairplot].corr()
-
-                # Mask correlations with abs value <= 0.7
-                mask = corr.abs() <= 0.7
-                corr_filtered = corr.mask(mask)
-
-                fig, ax = plt.subplots(figsize=(10, 8))
-                sns.heatmap(corr_filtered, annot=True, cmap="coolwarm", ax=ax, vmin=-1, vmax=1,
-                            center=0, linewidths=0.5, linecolor='gray', square=True, cbar_kws={"shrink": .8})
-
-                st.pyplot(fig)
-
-            except Exception as e:
-                st.error("❌ Error in MANOVA analysis:")
-                st.exception(e)
-
-    # ================================
-    # 📊 Multivariate & Predictive Analysis
-    # ================================
-    elif analysis_type == "Multiple Linear Regression":
-        st.header("🔢 Multiple Linear Regression")
-
-        df_T = df_numeric_reg.T
-
-        target_options = {i: name for i, name in target_rows_reg.items()}
-        target_index = st.selectbox("Select Target Variable", options=list(target_options.keys()), format_func=lambda x: target_options[x])
-
-        y = df_T[target_index]
-        predictor_indices = [i for i in target_rows_reg if i != target_index]
-        X = df_T[predictor_indices]
-
-        data = pd.concat([X, y], axis=1)
-
-        data[predictor_indices] = data[predictor_indices].apply(pd.to_numeric, errors='coerce')
-        data[target_index] = pd.to_numeric(data[target_index], errors='coerce')
-        data_clean = data.dropna()
-
-        # After cleaning:
-        X_clean = data_clean[predictor_indices]
-        y_clean = data_clean[target_index]
-
-        # Check if we have enough data to proceed
-        if X_clean.shape[0] == 0 or y_clean.shape[0] == 0:
-            st.warning("No valid data available after cleaning. Please select different variables or check your data.")
-        else:
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(X_clean)
-
-            model = LinearRegression()
-            model.fit(X_scaled, y_clean)
-
-            y_pred = model.predict(X_scaled)
-            r2 = model.score(X_scaled, y_clean)
-
-            st.subheader(f"R² Score: {r2:.3f}")
-            st.write("**Intercept:**", model.intercept_)
-
-            coef_df = pd.DataFrame({
-                "Feature": [target_rows_reg[i] for i in predictor_indices],
-                "Coefficient": model.coef_
-            }).sort_values(by="Coefficient", key=abs, ascending=False)
-
-            st.dataframe(coef_df)
-
-            fig, ax = plt.subplots(figsize=(10, 6))
-            sns.barplot(data=coef_df, x="Coefficient", y="Feature", palette="coolwarm")
-            ax.axvline(0, color='gray', linestyle='--')
-            st.pyplot(fig)
-
-            fig2, ax2 = plt.subplots(figsize=(8, 6))
-            ax2.scatter(y_clean, y_pred, alpha=0.7)
-            ax2.plot([y_clean.min(), y_clean.max()], [y_clean.min(), y_clean.max()], 'r--')
-            ax2.set_xlabel("Actual")
-            ax2.set_ylabel("Predicted")
-            ax2.set_title("Actual vs Predicted")
-            st.pyplot(fig2)
-            
-            
                 
-    elif analysis_type == "Exploratory PCA":
-        st.header("🔍 Exploratory PCA: Visualizing Separation by IWGDF Grade")
-
-        row_labels = df.iloc[:, 0]
-        df_numeric = df.iloc[:, 1:]
-        df_T = df_numeric.T
-
-        try:
-            # Get IWGDF grades from row 17 (index 16)
-            risk_row = df.iloc[16, 1:]
-            risk_grades = pd.to_numeric(risk_row, errors='coerce')
-
-            # Define variables for PCA
-            pca_rows = {
-                16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI",
-                35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-                75: "Medical history of acute Charcot R", 76: "Medical history of acute Charcot L",
-                77: "Chronic Charcot (R Sanders)", 78: "Chronic Charcot (L Sanders)",
-                94: "Dorsal flexion range MTP1 R", 95: "Dorsal flexion range MTP1 L", 96: "ROM Ankle R", 97: "ROM Ankle L",
-                108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R", 110: "Avg Pressure Max TM5 R",
-                113: "Avg Pressure Max SESA L", 114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
-                118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
-                122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-                126: "US Thickness ED SESA R", 127: "US Thickness ED HALLUX R", 128: "US Thickness ED TM5 R",
-                130: "US Thickness ED SESA L", 131: "US Thickness ED HALLUX L", 132: "US Thickness ED TM5 L",
-                134: "US Thickness Hypodermis SESA R", 135: "US Thickness Hypodermis HALLUX R", 136: "US Thickness Hypodermis TM5 R",
-                138: "US Thickness Hypodermis SESA L", 139: "US Thickness Hypodermis HALLUX L", 140: "US Thickness Hypodermis TM5 L",
-                142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R", 144: "Total Tissue Thickness TM5 R",
-                146: "Total Tissue Thickness SESA L", 147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-                150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R", 154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-                158: "Temperature Hallux R", 159: "Temperature 5th Toe R", 160: "Temperature Plantar Arch R",
-                161: "Temperature Lateral Sole R", 162: "Temperature Forefoot R", 163: "Temperature Heel R",
-                164: "Temperature Hallux L", 165: "Temperature 5th Toe L", 166: "Temperature Plantar Arch L",
-                167: "Temperature Lateral Sole L", 168: "Temperature Forefoot L", 169: "Temperature Heel L",
-                170: "Temperature Hand Mean D", 171: "Temperature Hand Mean L",
-                172: "Average IR Temperature Foot R (Celsius)", 173: "Average IR Temperature Foot L (Celsius)",
-                174: "Temperature Difference Hand-Foot R", 175: "Temperature Difference Hand-Foot L",
-                176: "Normalized Temperature R", 177: "Normalized Temperature L",
-                212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
-            }
-
-            df_features = df_T[list(pca_rows.keys())].copy()
-            df_features.columns = [pca_rows[i] for i in df_features.columns]
-            df_features = df_features.apply(pd.to_numeric, errors='coerce')
-
-            # Handle missing values
-            max_missing = st.slider("Max allowed % of missing values per feature", 0, 100, 30)
-            threshold = max_missing / 100
-            df_features = df_features.loc[:, df_features.isna().mean() < threshold]
-            df_clean = df_features.dropna()
-
-            # Align risk grades (and drop those with NaN)
-            risk_clean = risk_grades.loc[df_clean.index].dropna()
-            df_clean = df_clean.loc[risk_clean.index]
-
-            # Final check
-            if df_clean.shape[0] == 0:
-                st.error("❌ No valid data left after cleaning (too many NaNs). Check your file or lower the missing value threshold.")
-                st.stop()
-
-            # PCA
-            scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(df_clean)
-
-            pca = PCA(n_components=2)
-            X_pca = pca.fit_transform(X_scaled)
-            explained = pca.explained_variance_ratio_ * 100
-
-            # Plot
-            fig, ax = plt.subplots(figsize=(8, 6))
-            scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], c=risk_clean.astype(int), cmap="coolwarm", edgecolor="k", alpha=0.8)
-            ax.set_xlabel(f"PC1 ({explained[0]:.1f}% variance)")
-            ax.set_ylabel(f"PC2 ({explained[1]:.1f}% variance)")
-            ax.set_title("PCA: Patients Colored by IWGDF Grade")
-            legend1 = ax.legend(*scatter.legend_elements(), title="Risk Grade")
-            ax.add_artist(legend1)
-            st.pyplot(fig)
-
-            # Show metrics
-            st.write(f"**Explained Variance:** PC1 = {explained[0]:.1f}%, PC2 = {explained[1]:.1f}%")
-            st.write("📌 Features used:", df_clean.shape[1])
-            st.write("📌 Patients after cleaning:", df_clean.shape[0])
-            st.dataframe(df_clean)
-
-        except Exception as e:
-            st.error(f"⚠️ PCA failed: {e}")
-
-
-
-
 # ================================
 # 📎 File Not Uploaded Message
 # ================================
