@@ -2858,3 +2858,4 @@ if uploaded_file:
         df_table = pd.DataFrame(table_data, columns=["Parameter", "Mean", "Mean Difference", "±1.96 SD"])
         st.markdown("### 📋 Statistical Summary Table")
         st.dataframe(df_table)
+       
