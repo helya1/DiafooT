@@ -2302,7 +2302,7 @@ if uploaded_file:
                     ) 
                     for i in range(k)
                 ]
-                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
+                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper right", fontsize=8)
                 
                 # Store mean and median stats
                 cluster_stats_dict[f"{title_prefix}_{name}_mean"] = mean_stats
