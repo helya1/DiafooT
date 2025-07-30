@@ -4,22 +4,32 @@ DiafooT is a research initiative focused on improving the management and prevent
 
 ## Project Overview
 
-Globally, approximately 500 million people live with diabetes, many of whom face severe complications such as neuropathy (loss of sensation in the feet) and arteriopathy (impaired blood flow). These conditions contribute to chronic wounds and amputations, with a lower limb amputation occurring every 20 seconds worldwide. ⏰ Current healthcare systems often lack effective prevention and treatment strategies, leading to suboptimal outcomes.
+Globally, approximately 500 million people live with diabetes, many of whom face severe complications such as neuropathy (loss of sensation in the feet) and arteriopathy (impaired blood flow). These conditions contribute to chronic wounds and amputations, with a lower limb amputation occurring every 20 seconds worldwide. Current healthcare systems often lack effective prevention and treatment strategies, leading to suboptimal outcomes.
 
 Our research aims to:
 
-- Understand the intrinsic (e.g., skin thickness, bone geometry 🦴) and extrinsic (e.g., gait mechanics, pressure distribution 🚶) factors contributing to foot injuries.
-- Develop methods to give patients more time before complications escalate ⏳, preserving their body and enabling a more active life.
-- Prevent new wounds and recurrences by addressing root causes through clinical observation and data-driven analysis 📊.
+- Understand the intrinsic (e.g., skin thickness, bone geometry) and extrinsic (e.g., gait mechanics, pressure distribution 🚶) factors contributing to foot injuries.
+- Develop methods to give patients more time before complications escalate , preserving their body and enabling a more active life.
+- Prevent new wounds and recurrences by addressing root causes through clinical observation and data-driven analysis.
 
-We analyze parameters such as skin stiffness, pressure points, and vascular properties to identify correlations and develop predictive models. By clustering patients based on risk grades (IWGDF Grades 0–3) 📊, we aim to tailor interventions to specific patient profiles 🎯.
+We analyze parameters such as skin stiffness, pressure points, and vascular properties to identify correlations and develop predictive models. By clustering patients based on risk grades (IWGDF Grades 0–3) and without it, we aim to tailor interventions to specific patient profiles.
 
 ## Data and Tools 📊
 
 The project leverages clinical data stored in Excel file 📑 with a dedicated "DIAFOOT" sheet. We use advanced analytical tools to process and visualize this data, including:
 
 - **Streamlit 🌐**: For interactive dashboards to explore data and analysis results.
-- **Python Libraries**: Pandas, NumPy, Scikit-learn, Matplotlib, Seaborn, and SciPy for data processing ⚙️, statistical analysis 📉, clustering 🧩, and visualization 🎨.
+- **Python Libraries**:  
+  - **Core**: `datetime`, `io`, `re`  
+  - **Data Handling**: `pandas`, `numpy`  
+  - **Visualization**: `matplotlib`, `seaborn`  
+  - **Statistical Analysis**: `scipy`, `statsmodels` (including `MANOVA`)  
+  - **Machine Learning & Clustering**: `scikit-learn` (`KMeans`, `AgglomerativeClustering`, `GaussianMixture`, `LogisticRegression`, `LinearRegression`, `RandomForestClassifier`, `IsolationForest`, `PCA`, `SimpleImputer`, `StandardScaler`)  
+  - **Metrics & Evaluation**: `silhouette_score`, `adjusted_rand_score`, `normalized_mutual_info_score`, `calinski_harabasz_score`, `davies_bouldin_score`, `confusion_matrix`  
+  - **Web App Development**: `streamlit`  
+
+  Used for data processing ⚙️, statistical analysis 📉, clustering 🧩, modeling 🤖, and visualization 🎨.
+
 
 ### Website
 
@@ -45,47 +55,56 @@ streamlit run dashboard.py
 The `dashboard.py` script powers the DIAFOOT Analysis Dashboard, providing a user-friendly interface for uploading and analyzing clinical data. Below is a breakdown of its functionality:
 
 
-### Imports and Setup ⚙️📚
+### File Upload 📂
 
-- **Libraries**: Imports Streamlit for the UI 🧑‍💻, Pandas for data handling 🐼, NumPy for numerical operations ➗, Scikit-learn for machine learning (clustering, regression, PCA) 🤖, SciPy for statistical tests 📈, and Matplotlib/Seaborn for visualization 🎨.
-- **Page Configuration**: Sets the page title and layout for a wide display.
-
-### File Upload 📂⬆️
-
-- Users upload an Excel file containing a "DIAFOOT" sheet, which is read into a Pandas DataFrame.📑
+- Users upload an Excel file containing a "DIAFOOT" sheet, which is read into a Pandas DataFrame.
 
 
 ### Analysis Options 🔍
 
-The sidebar offers six analysis types:
+The sidebar now offers multiple analysis types, selected via a radio button menu:  
 
-1. **Stat Summary Extractor 📊**: Computes mean and standard deviation for selected parameters (e.g., height, weight, pressure) and generates a downloadable Excel file with summary statistics and deviations.
-2. **KMeans Clustering 🧩**: Clusters patients based on features correlated with risk grades using KMeans (4 clusters). Visualizes clusters with PCA and evaluates with silhouette score and ARI.
-3. **ED Thickness & Hypodermis Analysis 🩺**: Analyzes epidermis and hypodermis thickness for specific risk groups (Grades 0–1 or 2–3) using t-tests, correlations, and linear regression.
-4. **GMM Clustering 🔄**: Applies Gaussian Mixture Models (GMM) to cluster patients based on top features correlated with grades, visualized with PCA and evaluated with ARI.
-5. **Correlation Between Key Parameters 🔗**: Computes and visualizes correlations between parameters (e.g., pressure, skin thickness) using heatmaps and bar plots.
-6. **Mechanical Features Correlation Analysis ⚙️**: Focuses on mechanical parameters, identifying high correlations to reduce redundancy.
+1. **Basic Analysis **: Runs quick preliminary checks on the dataset.  
+2. **Descriptive Analysis**: Generates detailed descriptive statistics for all parameters.  
+3. **Normality Tests**: Applies tests such as Shapiro–Wilk to assess data distribution.  
+4. **L/R Comparison by Anatomical Zone **: Compares left vs right foot data within anatomical zones.  
+5. **Comparison of Left and Right Foot Parameters **: Performs paired comparisons for overall foot parameters.  
+6. **Diabetic vs Control**: Compares parameters between diabetic and control groups.  
+7. **IWGDF Risk Grade Summary & Clustering **: Summarizes risk grades and performs clustering.  
+8. **Clustering (Important Parameters)**: Applies clustering algorithms (KMeans, Agglomerative, GMM) using selected key features.  
+9. **Clustering (All Parameters)**: Runs clustering on the full set of parameters and evaluates metrics (silhouette, ARI, etc.).  
+10. **Correlation Between Key Parameters**: Computes and visualizes correlations between biomechanical and clinical parameters.  
+11. **Bland–Altman Plots by Parameter and Side**: Generates Bland–Altman plots for each parameter by left/right side.  
+12. **Bland–Altman Pooled Plots for All Parameters**: Creates pooled Bland–Altman plots across all parameters.  
 
-### Visualizations 
 
-- **Heatmaps **: Display correlation matrices and cluster-grade contingencies.
-- **Scatter Plots **: Show PCA-transformed data for clustering visualization.
-- **Bar Plots **: Illustrate feature importance (regression coefficients) and correlations with specific variables.
-
-### Key Features ⭐
+### Key Features
 
 - **Automation**: Calculations update automatically when new patient data is added to the Excel file.
 - **Interactivity**: Users can select analysis types, groups, and thresholds (e.g., correlation threshold).
 - **Explanations**: Expander sections provide insights into metrics (e.g., silhouette score, ARI) and chart interpretations.
 
+## Research Insights 🧠 
 
-## Research Insights 
+The **DIAFOOT study** focused on middle-aged adults with diabetes (mean age ≈57 years; mean BMI ~25.8 kg/m²), a population where foot pressure and ulcer risk typically begin to rise. Most participants were classified at the extremes of the **IWGDF risk scale** (Grades 0 or 3), providing valuable insight into early- and late-stage risk profiles.  
 
-Our clinical observations highlight: 
+###  Key Findings 🔑
 
-- **Neuropathy 🦶⚡**: Patients with reduced foot sensation are prone to unnoticed injuries, exacerbated by continuous pressure on wounds.
-- **Arteriopathy ❤️🩸**: Poor blood flow hinders wound healing, worsening outcomes.
-- **Mechanical Factors 🦴🛠️**: Skin thickness, stiffness, and bone geometry influence injury risk. Thicker, more elastic skin may absorb shocks better, while rigid tissue is more prone to damage.
-- **Gait Analysis 🚶‍♂️📏**: Measures maximum pressure and pressure distribution to identify at-risk areas (e.g., first metatarsal head, sesamoids, fifth metatarsal).
+- **Neuropathy & Soft Tissue Integrity**: Peripheral nerve dysfunction and reduced plantar fat pad thickness remain core predictors of **diabetic foot ulcer (DFU)** risk. Neuropathy prevalence was strikingly high in at-risk groups.  
+- **Biomechanical & Thermal Asymmetries**: Significant left/right differences were observed in **plantar pressure** (notably under the 5th metatarsal), **big toe stiffness**, and **plantar temperature**. These imbalances can signal uneven load distribution, vascular stress, or subclinical inflammation.  
+- **Correlations**:  
+  - Plantar tissue thickness ↔ plantar temperature: *ρ ≈ 0.99* (thermal insulation effect)  
+  - IWGDF risk grade ↔ Michigan Neuropathy Score: *ρ ≈ -0.83* (neuropathy severity aligns with higher risk)  
 
+Using **LASSO regression**, **Random Forests**, and **ANOVA-based feature ranking**, the top predictors of DFU risk were:  
+1. **Michigan Neuropathy Score**  
+2. **Patient height**  
+3. **Plantar tissue thickness**  
+
+This convergence across algorithms highlights the robustness of these markers. Simple, non-invasive measurements (neuropathy tests, anthropometrics, ultrasound) could enable scalable DFU screening.  
+
+---
+
+**Bottom line:**  
+Our results demonstrate that readily measurable foot parameters **neuropathy, plantar pressure, stiffness, tissue thickness, and temperature** can powerfully stratify DFU risk. Integrating these metrics into clinical workflows may enable **earlier detection** and **personalized prevention strategies**, especially in primary care or resource-limited settings.  
 
