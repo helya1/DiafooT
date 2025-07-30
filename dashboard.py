@@ -2288,7 +2288,7 @@ if uploaded_file:
                 cluster_handles = [plt.Line2D([0], [0], marker='o', color='w', label=f"Cluster {i}", 
                                             markerfacecolor=color_map.get(i, "black"), markersize=10) 
                                 for i in range(k)]
-                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
+                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper right", fontsize=8)
                 
                 cluster_handles = [
                     plt.Line2D(
