@@ -1941,6 +1941,7 @@ if uploaded_file:
                 ss_between = sum(len(g) * (g.mean() - full_df_cleaned_without[col].mean())**2 for g in groups)
                 eta_squared[col] = ss_between / ss_total if ss_total > 0 else 0
         eta_squared_df = pd.DataFrame.from_dict(eta_squared, orient='index', columns=['Eta Squared']).sort_values(by='Eta Squared', ascending=False).head(5)
+        st.write("Univariate ANOVAs calculate R² (eta squared) for each parameter, establishing a clear hierarchy of the most influential variables for IWGDF group differences.")
         st.dataframe(eta_squared_df)
 
         # Display feature importance from clustering
@@ -2287,7 +2288,7 @@ if uploaded_file:
                 cluster_handles = [plt.Line2D([0], [0], marker='o', color='w', label=f"Cluster {i}", 
                                             markerfacecolor=color_map.get(i, "black"), markersize=10) 
                                 for i in range(k)]
-                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper right", fontsize=8)
+                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
                 
                 cluster_handles = [
                     plt.Line2D(
@@ -2436,8 +2437,7 @@ if uploaded_file:
 
         st.write("#### Univariate ANOVA with Eta Squared")
         eta_squared = {}
-        for col in full_df_cleaned_w
-        ithout.drop(columns=['Patient_File_Number']).columns:
+        for col in full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns:
             groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
             if all(len(g) > 0 for g in groups):
                 f_stat, p_value = f_oneway(*groups)
@@ -2858,4 +2858,3 @@ if uploaded_file:
         df_table = pd.DataFrame(table_data, columns=["Parameter", "Mean", "Mean Difference", "±1.96 SD"])
         st.markdown("### 📋 Statistical Summary Table")
         st.dataframe(df_table)
-       
