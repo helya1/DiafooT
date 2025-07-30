@@ -36,18 +36,114 @@ from sklearn.metrics import (
     confusion_matrix, ConfusionMatrixDisplay
 )
 from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier, IsolationForest
 
 # Web App
 import streamlit as st
 
-
 from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
 from sklearn.ensemble import RandomForestClassifier
+
 # ================================
 # 🌐 Streamlit Page Setup
 # ================================
-st.set_page_config(page_title="DIAFOOT Analysis Dashboard", layout="wide")
-st.title("📊 DIAFOOT Analysis Dashboard")
+st.set_page_config(
+    page_title="DIAFOOT Analysis Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+# ================================
+# 🎨 Custom CSS for Styling
+# ================================
+st.markdown("""
+    <style>
+    /* Global App Background */
+    .stApp {
+        background: #e0f2fe; /* Light sky blue background */
+        font-family: 'Roboto', sans-serif;
+        color: #000000; /* Black text everywhere */
+    }
+
+    /* Main Title */
+    .main-title {
+        color: #000000; /* Black text */
+        font-size: 3em;
+        font-weight: 800;
+        text-align: center;
+        margin-bottom: 30px;
+        letter-spacing: 0.5px;
+    }
+
+    /* Sidebar */
+    .sidebar .sidebar-content {
+        background: #0a3d62; /* deep navy sky blue */
+        border-radius: 14px;
+        padding: 18px;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+        color: #000000; /* Black text */
+    }
+    
+    /* Buttons */
+    .stButton>button {
+        background: #e0f2fe; /* Light sky blue background */
+        color: #000000; /* Black text */
+        border-radius: 10px;
+        padding: 12px 22px;
+        font-weight: 600;
+        border: none;
+        font-size: 1em;
+        transition: all 0.3s ease;
+    }
+    .stButton>button:hover {
+        background: #0a3d62; /* deep navy sky blue */
+        transform: scale(1.05);
+    }
+
+    /* File Uploader */
+    div[data-testid="stFileUploader"] label {
+        color: #000000 !important;  /* Black text for label */
+        font-weight: 600;
+    }
+
+ /* Style for st.info */
+    .stAlert {
+        border-radius: 10px;
+        font-weight: 600;
+    }
+    /* Dark blue background for info box */
+    .stAlert[data-baseweb="toast"][class*="stAlert-info"] {
+        background-color: #1e3a8a !important;  /* deep blue */
+        color: #ffffff !important;             /* white text */
+    }
+    /* Dark red background for error box */
+    .stAlert[data-baseweb="toast"][class*="stAlert-error"] {
+        background-color: #991b1b !important;  /* deep red */
+        color: #ffffff !important;             /* white text */
+    }
+    
+    /* Force all text inside st.info to black */
+    div[data-testid="stInfo"] * {
+        color: #000000 !important;  /* Black text for label */
+        font-weight: 600;
+    }
+
+    /* Radio Box Container */
+    .stRadio > div {
+        background-color: #000000; /* Black background */
+        border-radius: 12px;
+        padding: 15px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    .stRadio > div[role='radiogroup'] > label {
+        color: #000000 !important; /* Black text */
+        font-weight: 600;
+    }
+
+    </style>
+""", unsafe_allow_html=True)
+
+# Main Title
+st.markdown('<div class="main-title">📊 DIAFOOT Analysis Dashboard</div>', unsafe_allow_html=True)
 
 # ================================
 # 📤 File Upload
@@ -73,8 +169,13 @@ if uploaded_file:
             "Correlation Between Key Parameters",
             "Bland-Altman Plots by Parameter and Side",
             "Bland-Altman Pooled Plots for all parameters",
-        )
+        ),
+        index=0,
+        help="Choose the type of analysis to perform on the uploaded data."
     )
+
+    # Add more content and analysis sections here
+    st.markdown("### Choose your analysis from the sidebar to start exploring the data.")
 
     # Target Rows for General Analysis
     target_rows = {
@@ -316,7 +417,6 @@ if uploaded_file:
             )
             ax_gender.axis('equal')
             st.pyplot(fig_gender)
-            st.info(f"👥 Total patients with valid gender data: **{total_patients}**")
             gender_percent_text = "\n".join(
                 [f"- {label}: {count} patients ({percent}%)" for label, count, percent in zip(valid_counts.index, valid_counts, percentages)]
             )
@@ -1511,7 +1611,7 @@ if uploaded_file:
             176: "Normalized Temperature R", 177: "Normalized Temperature L",
         }
 
-        # Extract IWGDF grades and patient IDs
+        # Extract IWGDF grades and patient file numbers
         risk_row = df.iloc[16]
         risk_values = pd.to_numeric(risk_row[1:], errors='coerce').dropna().astype(int)
         patient_ids = risk_values.index.tolist()
@@ -1552,36 +1652,43 @@ if uploaded_file:
             selected_features.index = [cleaned_index[k] for k in selected_features.index]
             selected_features = selected_features.loc[:, patient_ids]
             features_df = selected_features.T.apply(pd.to_numeric, errors='coerce')
-            full_df = features_df.copy()
-            true_labels = risk_values.reindex(full_df.index)
+            features_df['Patient_File_Number'] = features_df.index
+            true_labels = risk_values.reindex(features_df.index)
             
             # Clean data
-            valid_features = full_df.isnull().sum() < full_df.shape[0] * 0.5
-            full_df_cleaned = full_df.loc[:, valid_features]
+            valid_features = features_df.isnull().sum() < features_df.shape[0] * 0.5
+            full_df_cleaned = features_df.loc[:, valid_features]
             full_df_cleaned = full_df_cleaned.loc[:, full_df_cleaned.count() >= 20]
-            full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()), axis=0)
+            full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()) if col.name != 'Patient_File_Number' else col, axis=0)
             
-            if full_df_cleaned.shape[1] == 0 or full_df_cleaned.shape[0] < 2:
-                return None, None, None
+            if full_df_cleaned.shape[1] <= 1 or full_df_cleaned.shape[0] < 2:
+                return None, None, None, None
+            
+            # Outlier detection
+            iso_forest = IsolationForest(contamination=0.1, random_state=42)
+            outlier_labels = iso_forest.fit_predict(full_df_cleaned.drop(columns=['Patient_File_Number']))
+            non_outliers = outlier_labels == 1
+            full_df_cleaned = full_df_cleaned[non_outliers]
+            true_labels = true_labels[non_outliers]
             
             # Scale data
             scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(full_df_cleaned)
+            X_scaled = scaler.fit_transform(full_df_cleaned.drop(columns=['Patient_File_Number']))
             
-            return X_scaled, full_df_cleaned, true_labels
+            return X_scaled, full_df_cleaned, true_labels, scaler
 
         # Prepare data for both cases
-        X_scaled_with, full_df_cleaned_with, true_labels_with = prepare_data(include_grade=True)
-        X_scaled_without, full_df_cleaned_without, true_labels_without = prepare_data(include_grade=False)
+        X_scaled_with, full_df_cleaned_with, true_labels_with, scaler_with = prepare_data(include_grade=True)
+        X_scaled_without, full_df_cleaned_without, true_labels_without, scaler_without = prepare_data(include_grade=False)
 
         if X_scaled_with is None or X_scaled_without is None:
-            st.warning("Not enough valid data for clustering with important parameters.")
+            st.warning("Not enough valid data for clustering with important parameters after outlier removal.")
             st.stop()
 
         # Align indices
         common_indices = full_df_cleaned_with.index.intersection(full_df_cleaned_without.index)
         if len(common_indices) < 2:
-            st.warning("Not enough overlapping patients for clustering.")
+            st.warning("Not enough overlapping patients for clustering after outlier removal.")
             st.stop()
 
         X_scaled_with = X_scaled_with[full_df_cleaned_with.index.isin(common_indices)]
@@ -1621,6 +1728,7 @@ if uploaded_file:
         feature_importance_dict_with = {}
         feature_importance_dict_without = {}
         confusion_matrices = {}
+        cluster_stats_dict = {}
 
         # Create subplots (2 columns: with grade, without grade)
         n_algos = len(clustering_algos)
@@ -1667,7 +1775,7 @@ if uploaded_file:
                 # Calculate feature importance
                 rf = RandomForestClassifier(random_state=42)
                 rf.fit(X_scaled, labels)
-                feature_importance_dict[name] = pd.Series(rf.feature_importances_, index=full_df_cleaned.columns)
+                feature_importance_dict[name] = pd.Series(rf.feature_importances_, index=full_df_cleaned.drop(columns=['Patient_File_Number']).columns)
                 
                 # Calculate mean and median per cluster
                 cluster_stats = full_df_cleaned.copy()
@@ -1675,7 +1783,7 @@ if uploaded_file:
                 mean_stats = cluster_stats.groupby('Cluster').mean()
                 median_stats = cluster_stats.groupby('Cluster').median()
                 
-                # Plot with cluster colors and grade markers
+                # Plot with cluster colors, grade markers, and patient file numbers
                 ax = axes[idx, col_idx]
                 for grade in sorted(true_labels.unique()):
                     mask = true_labels == grade
@@ -1684,6 +1792,16 @@ if uploaded_file:
                         c=[color_map.get(lbl, "black") for lbl in labels[mask]], 
                         marker=marker_map[grade], s=80, label=f"Grade {grade}"
                     )
+                    # Add patient file numbers as annotations
+                    for i, patient_id in enumerate(full_df_cleaned['Patient_File_Number'][mask]):
+                        ax.annotate(
+                            patient_id, 
+                            (coords[mask, 0][i] + 0.02, coords[mask, 1][i] + 0.02),  # Slight offset
+                            fontsize=10, 
+                            fontweight='bold', 
+                            alpha=0.9,
+                        )
+                
                 ax.set_title(f"{name} ({title_prefix})\nSilhouette={silhouette:.3f}, ARI={ari:.3f}, NMI={nmi:.3f}", fontsize=14, pad=20)
                 ax.set_xlabel("PCA1", fontsize=10)
                 ax.set_ylabel("PCA2", fontsize=10)
@@ -1700,9 +1818,6 @@ if uploaded_file:
                 # Store mean and median stats
                 cluster_stats_dict[f"{title_prefix}_{name}_mean"] = mean_stats
                 cluster_stats_dict[f"{title_prefix}_{name}_median"] = median_stats
-
-        # Dictionary to store cluster stats
-        cluster_stats_dict = {}
 
         # Run clustering for both cases
         st.subheader("Clustering Comparison: With and Without IWGDF Grade")
@@ -1747,13 +1862,22 @@ if uploaded_file:
         st.pyplot(fig)
         plt.close(fig)  # Close figure to free memory
 
+        # Outlier Analysis
+        st.write("### Outlier Analysis")
+        iso_forest = IsolationForest(contamination=0.1, random_state=42)
+        outlier_labels = iso_forest.fit_predict(X_scaled_without)
+        outliers = full_df_cleaned_without[outlier_labels == -1]
+        st.write(f"Number of outliers detected: {len(outliers)}")
+        st.write("Outlier Patient File Numbers:")
+        st.dataframe(outliers[['Patient_File_Number']])
+
         # IWGDF Group Homogeneity Analysis
         st.write("### IWGDF Group Homogeneity Analysis")
         
         # Calculate within-group inertia
         inertia = calculate_inertia(X_scaled_without, true_labels)
         st.write(f"Within-group inertia for IWGDF groups: {inertia:.3f}")
-        st.write("**Interpretation**: Within-group inertia measures the compactness of IWGDF groups. The value of 98.974 suggests moderate to high variability within grades, indicating that points within each IWGDF grade are relatively spread out from their centroid.")
+        st.write("**Interpretation**: Within-group inertia measures the compactness of IWGDF groups. The value suggests moderate to high variability within grades, indicating that points within each IWGDF grade are relatively spread out from their centroid.")
 
         # Check sample sizes per IWGDF grade
         grade_counts = true_labels.value_counts().sort_index()
@@ -1763,9 +1887,9 @@ if uploaded_file:
 
         # MANOVA with IWGDF grade as factor
         st.write("#### MANOVA with IWGDF Grade as Factor")
-        manova_data = full_df_cleaned_without.copy()
+        manova_data = full_df_cleaned_without.drop(columns=['Patient_File_Number']).copy()
         manova_data['IWGDF'] = true_labels
-        formula = ' + '.join(full_df_cleaned_without.columns) + ' ~ IWGDF'
+        formula = ' + '.join(full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns) + ' ~ IWGDF'
         try:
             manova = MANOVA.from_formula(formula, data=manova_data)
             manova_result = manova.mv_test()
@@ -1788,7 +1912,7 @@ if uploaded_file:
         try:
             lasso = LogisticRegression(penalty='l1', solver='liblinear', random_state=42)
             lasso.fit(X_scaled_without, true_labels)
-            lasso_importance = pd.Series(np.abs(lasso.coef_[0]), index=full_df_cleaned_without.columns)
+            lasso_importance = pd.Series(np.abs(lasso.coef_[0]), index=full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns)
             lasso_importance = lasso_importance.sort_values(ascending=False).head(5)
             st.write("LASSO regression allows automatic selection of the most predictive variables. Non-zero coefficients highlight key parameters for IWGDF grade prediction.")
             lasso_df = pd.DataFrame({'Parameter': lasso_importance.index, 'Coefficient': lasso_importance.values})
@@ -1800,7 +1924,7 @@ if uploaded_file:
         st.write("#### Random Forest Classifier Feature Importance")
         rf_classifier = RandomForestClassifier(random_state=42)
         rf_classifier.fit(X_scaled_without, true_labels)
-        rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.columns)
+        rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns)
         rf_importance = rf_importance.sort_values(ascending=False).head(5)
         st.write("Random Forest Classifier extracts the relative importance of variables in distinguishing IWGDF grades.")
         rf_df = pd.DataFrame({'Parameter': rf_importance.index, 'Importance': rf_importance.values})
@@ -1809,7 +1933,7 @@ if uploaded_file:
         # Univariate ANOVAs and Eta Squared
         st.write("#### Univariate ANOVA with Eta Squared")
         eta_squared = {}
-        for col in full_df_cleaned_without.columns:
+        for col in full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns:
             groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
             if all(len(g) > 0 for g in groups):
                 f_stat, p_value = f_oneway(*groups)
@@ -1866,29 +1990,32 @@ if uploaded_file:
         # Interpretation
         st.markdown("""
         ### Interpretation:
+        - **Outlier Detection**:
+            - Outliers are detected using Isolation Forest with a contamination rate of 0.1 (10% of data points assumed as outliers).
+            - Outlier patient file numbers are listed to identify potentially anomalous cases for further clinical review.
         - **Clustering Visualization**:
-        - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star).
-        - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on biomechanical, vascular, and thermal parameters. Same color/symbol scheme for comparison.
+            - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star). Each point is annotated with the patient file number.
+            - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on biomechanical, vascular, and thermal parameters. Same color/symbol scheme for comparison, with patient file numbers annotated.
         - **Clustering Metrics**:
-        - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
-        - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
-        - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
-        - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
-        - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
+            - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
+            - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
+            - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
+            - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
+            - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
         - **Confusion Matrices**: Show alignment between IWGDF grades (0, 1, 2, 3) and cluster labels. High diagonal values indicate good correspondence; off-diagonal values suggest misalignments, potentially indicating limitations in IWGDF grading.
         - **IWGDF Group Homogeneity**:
-        - **Within-group Inertia (98.974)**: Measures the compactness of IWGDF groups by summing the squared distances of points to their grade centroids. The value of 98.974 suggests moderate to high variability within IWGDF grades, indicating that points within each grade are relatively spread out. This relatively high inertia, combined with MANOVA and Silhouette Score results, suggests that IWGDF grades may not form highly compact groups, potentially due to heterogeneity within grades.
-        - **MANOVA (IWGDF Grade as Factor)**: A p-value of 0 (or <0.001) across all test statistics (e.g., Pillai’s Trace, Wilks’ Lambda) indicates highly significant differences between IWGDF groups, suggesting they are well-separated in the multivariate parameter space. However, such extreme significance should be validated by checking data quality, including sufficient samples per group (see sample sizes above) and absence of multicollinearity among features.
-        - **Silhouette Score for IWGDF Labels**: Calculated using IWGDF labels as imposed clusters. A low score (close to 0) indicates high overlap between groups, suggesting poor separation of IWGDF grades. A higher score (>0.5) suggests well-defined groups.
+            - **Within-group Inertia**: Measures the compactness of IWGDF groups by summing the squared distances of points to their grade centroids. Moderate to high values suggest variability within grades.
+            - **MANOVA (IWGDF Grade as Factor)**: A p-value of 0 (or <0.001) indicates significant differences between IWGDF groups, suggesting they are well-separated in the multivariate parameter space. Verify data quality to ensure reliability.
+            - **Silhouette Score for IWGDF Labels**: A low score indicates high overlap between groups, suggesting poor separation. A higher score (>0.5) suggests well-defined groups.
         - **Parameter Importance**:
-        - **Logistic Regression with LASSO Regularization**: Allows automatic selection of the most predictive variables for IWGDF grades. Non-zero coefficients highlight key discriminators, with higher absolute values indicating stronger influence.
-        - **Random Forest Classifier**: Extracts the relative importance of variables in the classification of IWGDF grades or clusters. Higher importance scores indicate greater contribution.
-        - **Univariate ANOVAs with R² (Eta Squared)**: Performed after MANOVA to calculate R² (eta squared) for each parameter, establishing a clear hierarchy of the most influential variables for IWGDF group differences. Higher eta squared values indicate parameters explaining more variance between grades.
+            - **Logistic Regression with LASSO Regularization**: Non-zero coefficients highlight key discriminators for IWGDF grades.
+            - **Random Forest Classifier**: Higher importance scores indicate greater contribution to classification.
+            - **Univariate ANOVAs with R² (Eta Squared)**: Higher eta squared values indicate parameters explaining more variance between grades.
         - **Key Insights**:
-        - The within-group inertia of 98.974 indicates moderate to high variability within IWGDF grades. If paired with a low Silhouette Score, it suggests overlapping or heterogeneous groups, questioning the homogeneity of IWGDF classifications.
-        - A MANOVA p-value of 0 indicates strong separation between IWGDF groups, but validation is needed to rule out data issues (e.g., small sample sizes or multicollinearity).
-        - Low ARI/NMI in the without-grade case suggests natural groupings may differ from IWGDF grades, potentially offering alternative stratifications.
-        - Parameters with high LASSO coefficients, Random Forest importance, or eta squared values are the most influential in differentiating groups, guiding clinical focus.
+            - Outlier detection helps identify patients with unusual parameter profiles, which may warrant further investigation.
+            - Patient file numbers on plots enable tracking of individual cases within clusters.
+            - Low ARI/NMI in the without-grade case suggests natural groupings may differ from IWGDF grades, potentially offering alternative stratifications.
+            - Parameters with high LASSO coefficients, Random Forest importance, or eta squared values guide clinical focus.
         """)
 
     # ================================
@@ -1937,7 +2064,7 @@ if uploaded_file:
         # Debug: Print analysis type
         st.write(f"Current analysis type: {analysis_type}")
 
-        # Extract IWGDF grades and patient IDs
+        # Extract IWGDF grades and patient file numbers
         risk_row = df.iloc[16]
         risk_values = pd.to_numeric(risk_row[1:], errors='coerce').dropna().astype(int)
         patient_ids = risk_values.index.tolist()
@@ -1981,6 +2108,7 @@ if uploaded_file:
             
             # Convert numeric columns
             features_df = selected_features.loc[numeric_cols].T.apply(pd.to_numeric, errors='coerce')
+            features_df['Patient_File_Number'] = features_df.index
             
             # Encode categorical columns
             if categorical_cols:
@@ -1998,28 +2126,36 @@ if uploaded_file:
             st.write(f"Features after missing value filter: {full_df_cleaned.shape[1]}")
             
             full_df_cleaned = full_df_cleaned.loc[:, full_df_cleaned.count() >= 10]
-            full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()), axis=0)
+            full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()) if col.name != 'Patient_File_Number' else col, axis=0)
             
-            if full_df_cleaned.shape[1] == 0 or full_df_cleaned.shape[0] < 2:
-                return None, None, None
+            if full_df_cleaned.shape[1] <= 1 or full_df_cleaned.shape[0] < 2:
+                return None, None, None, None
             
+            # Outlier detection
+            iso_forest = IsolationForest(contamination=0.1, random_state=42)
+            outlier_labels = iso_forest.fit_predict(full_df_cleaned.drop(columns=['Patient_File_Number']))
+            non_outliers = outlier_labels == 1
+            full_df_cleaned = full_df_cleaned[non_outliers]
+            true_labels = true_labels[non_outliers]
+            
+            # Scale data
             scaler = StandardScaler()
-            X_scaled = scaler.fit_transform(full_df_cleaned)
+            X_scaled = scaler.fit_transform(full_df_cleaned.drop(columns=['Patient_File_Number']))
             
-            return X_scaled, full_df_cleaned, true_labels
+            return X_scaled, full_df_cleaned, true_labels, scaler
 
         # Prepare data for both cases
-        X_scaled_with, full_df_cleaned_with, true_labels_with = prepare_data(include_grade=True)
-        X_scaled_without, full_df_cleaned_without, true_labels_without = prepare_data(include_grade=False)
+        X_scaled_with, full_df_cleaned_with, true_labels_with, scaler_with = prepare_data(include_grade=True)
+        X_scaled_without, full_df_cleaned_without, true_labels_without, scaler_without = prepare_data(include_grade=False)
 
         if X_scaled_with is None or X_scaled_without is None:
-            st.warning("Not enough valid data for clustering with all parameters.")
+            st.warning("Not enough valid data for clustering with all parameters after outlier removal.")
             st.stop()
 
         # Align indices
         common_indices = full_df_cleaned_with.index.intersection(full_df_cleaned_without.index)
         if len(common_indices) < 2:
-            st.warning("Not enough overlapping patients for clustering.")
+            st.warning("Not enough overlapping patients for clustering after outlier removal.")
             st.stop()
 
         X_scaled_with = X_scaled_with[full_df_cleaned_with.index.isin(common_indices)]
@@ -2067,6 +2203,7 @@ if uploaded_file:
         feature_importance_dict_with = {}
         feature_importance_dict_without = {}
         confusion_matrices = {}
+        cluster_stats_dict = {}
 
         # Create subplots (2 columns: with grade, without grade)
         n_algos = len(clustering_algos)
@@ -2113,7 +2250,7 @@ if uploaded_file:
                 # Calculate feature importance
                 rf = RandomForestClassifier(random_state=42)
                 rf.fit(X_scaled, labels)
-                feature_importance_dict[name] = pd.Series(rf.feature_importances_, index=full_df_cleaned.columns)
+                feature_importance_dict[name] = pd.Series(rf.feature_importances_, index=full_df_cleaned.drop(columns=['Patient_File_Number']).columns)
                 
                 # Calculate mean and median per cluster
                 cluster_stats = full_df_cleaned.copy()
@@ -2121,7 +2258,7 @@ if uploaded_file:
                 mean_stats = cluster_stats.groupby('Cluster').mean()
                 median_stats = cluster_stats.groupby('Cluster').median()
                 
-                # Plot with cluster colors and grade markers
+                # Plot with cluster colors, grade markers, and patient file numbers
                 ax = axes[idx, col_idx]
                 for grade in sorted(true_labels.unique()):
                     mask = true_labels == grade
@@ -2130,11 +2267,21 @@ if uploaded_file:
                         c=[color_map.get(lbl, "black") for lbl in labels[mask]], 
                         marker=marker_map[grade], s=80, label=f"Grade {grade}"
                     )
+                    # Add patient file numbers as annotations with improved legibility
+                    for i, patient_id in enumerate(full_df_cleaned['Patient_File_Number'][mask]):
+                        ax.annotate(
+                            patient_id, 
+                            (coords[mask, 0][i] + 0.02, coords[mask, 1][i] + 0.02),  # Slight offset
+                            fontsize=10, 
+                            fontweight='bold', 
+                            alpha=0.9,
+                        )
+
                 ax.set_title(f"{name} ({title_prefix})\nSilhouette={silhouette:.3f}, ARI={ari:.3f}, NMI={nmi:.3f}", fontsize=14, pad=20)
                 ax.set_xlabel("PCA1", fontsize=10)
                 ax.set_ylabel("PCA2", fontsize=10)
                 
-                # Create legends
+                # Create legends with restored marker shapes
                 grade_handles = [plt.Line2D([0], [0], marker=marker_map[grade], color='w', label=f"Grade {grade}", 
                                             markerfacecolor='gray', markersize=10) 
                                 for grade in sorted(true_labels.unique())]
@@ -2143,12 +2290,23 @@ if uploaded_file:
                                 for i in range(k)]
                 ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
                 
+                cluster_handles = [
+                    plt.Line2D(
+                        [0], [0], 
+                        marker='o', 
+                        color='w', 
+                        label=f"Cluster {i}", 
+                        markerfacecolor=color_map.get(i, "black"), 
+                        markeredgecolor='black',
+                        markersize=10
+                    ) 
+                    for i in range(k)
+                ]
+                ax.legend(handles=grade_handles + cluster_handles, title="IWGDF Grades & Clusters", loc="upper left", fontsize=8)
+                
                 # Store mean and median stats
                 cluster_stats_dict[f"{title_prefix}_{name}_mean"] = mean_stats
                 cluster_stats_dict[f"{title_prefix}_{name}_median"] = median_stats
-
-        # Dictionary to store cluster stats
-        cluster_stats_dict = {}
 
         # Run clustering for both cases
         st.subheader("Clustering Comparison: With and Without IWGDF Grade")
@@ -2192,6 +2350,15 @@ if uploaded_file:
         st.pyplot(fig)
         plt.close(fig)
 
+        # Outlier Analysis
+        st.write("### Outlier Analysis")
+        iso_forest = IsolationForest(contamination=0.1, random_state=42)
+        outlier_labels = iso_forest.fit_predict(X_scaled_without)
+        outliers = full_df_cleaned_without[outlier_labels == -1]
+        st.write(f"Number of outliers detected: {len(outliers)}")
+        st.write("Outlier Patient File Numbers:")
+        st.dataframe(outliers[['Patient_File_Number']])
+
         # IWGDF Group Homogeneity Analysis
         st.write("### IWGDF Group Homogeneity Analysis")
 
@@ -2206,12 +2373,11 @@ if uploaded_file:
 
         # MANOVA with IWGDF Grade as Factor
         st.write("#### MANOVA with IWGDF Grade as Factor")
-        manova_data = full_df_cleaned_without.copy()
+        manova_data = full_df_cleaned_without.drop(columns=['Patient_File_Number']).copy()
         manova_data['IWGDF'] = true_labels
 
         # Clean column names for MANOVA formula
         def clean_manova_column_name(name):
-            # Remove invalid characters, replace spaces with underscores, ensure starts with letter
             name = re.sub(r'[^\w\s]', '', name).strip().replace(' ', '_')
             if not name[0].isalpha():
                 name = 'p_' + name
@@ -2256,7 +2422,7 @@ if uploaded_file:
         try:
             lasso = LogisticRegression(penalty='l1', solver='liblinear', random_state=42)
             lasso.fit(X_scaled_without, true_labels)
-            lasso_importance = pd.Series(np.abs(lasso.coef_[0]), index=full_df_cleaned_without.columns)
+            lasso_importance = pd.Series(np.abs(lasso.coef_[0]), index=full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns)
             lasso_importance = lasso_importance.sort_values(ascending=False).head(5)
             st.dataframe(pd.DataFrame({'Parameter': lasso_importance.index, 'Coefficient': lasso_importance.values}))
         except Exception as e:
@@ -2265,13 +2431,13 @@ if uploaded_file:
         st.write("#### Random Forest Classifier Feature Importance")
         rf_classifier = RandomForestClassifier(random_state=42)
         rf_classifier.fit(X_scaled_without, true_labels)
-        rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.columns)
+        rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns)
         rf_importance = rf_importance.sort_values(ascending=False).head(5)
         st.dataframe(pd.DataFrame({'Parameter': rf_importance.index, 'Importance': rf_importance.values}))
 
         st.write("#### Univariate ANOVA with Eta Squared")
         eta_squared = {}
-        for col in full_df_cleaned_without.columns:
+        for col in full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns:
             groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
             if all(len(g) > 0 for g in groups):
                 f_stat, p_value = f_oneway(*groups)
@@ -2321,6 +2487,38 @@ if uploaded_file:
             median_key = f"Without Grade_{algo_name}_median"
             if mean_key in cluster_stats_dict:
                 st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
+
+        # Interpretation
+        st.markdown("""
+        ### Interpretation:
+        - **Outlier Detection**:
+            - Outliers are detected using Isolation Forest with a contamination rate of 0.1 (10% of data points assumed as outliers).
+            - Outlier patient file numbers are listed to identify potentially anomalous cases for further clinical review.
+        - **Clustering Visualization**:
+            - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star). Each point is annotated with the patient file number, styled with a larger, bold font and a semi-transparent white background for improved legibility.
+            - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on all other parameters. Same color/symbol scheme for comparison, with patient file numbers annotated similarly.
+            - **Legend**: The legend restores the original marker shapes, with IWGDF grades shown as circles, squares, triangles, and stars, and clusters shown as circles with their respective colors.
+        - **Clustering Metrics**:
+            - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
+            - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
+            - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
+            - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
+            - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
+        - **Confusion Matrices**: Show alignment between IWGDF grades (0, 1, 2, 3) and cluster labels. High diagonal values indicate good correspondence; off-diagonal values suggest misalignments.
+        - **IWGDF Group Homogeneity**:
+            - **Within-group Inertia**: Measures the compactness of IWGDF groups. Lower values indicate tighter clusters.
+            - **MANOVA**: A p-value < 0.05 indicates significant differences between IWGDF groups.
+            - **Silhouette Score for IWGDF Labels**: Higher scores (>0.5) indicate well-separated groups.
+        - **Parameter Importance**:
+            - **Logistic Regression with LASSO Regularization**: Non-zero coefficients highlight key discriminators for IWGDF grades.
+            - **Random Forest Classifier**: Higher importance scores indicate greater contribution to classification.
+            - **Univariate ANOVAs with Eta Squared**: Higher eta squared values indicate parameters explaining more variance between grades.
+        - **Key Insights**:
+            - Outlier detection helps identify patients with unusual parameter profiles.
+            - Patient file numbers on plots, with enhanced legibility, enable tracking of individual cases within clusters.
+            - Low ARI/NMI in the without-grade case suggests natural groupings may differ from IWGDF grades.
+            - Parameters with high LASSO coefficients, Random Forest importance, or eta squared values guide clinical focus.
+        """)
     # ================================
     # 📌 Correlation Between Key Parameters
     # ================================
@@ -2660,9 +2858,4 @@ if uploaded_file:
         df_table = pd.DataFrame(table_data, columns=["Parameter", "Mean", "Mean Difference", "±1.96 SD"])
         st.markdown("### 📋 Statistical Summary Table")
         st.dataframe(df_table)
-                
-# ================================
-# 📎 File Not Uploaded Message
-# ================================
-else:
-    st.info("Please upload an Excel file containing the 'DIAFOOT' sheet.")
+       
