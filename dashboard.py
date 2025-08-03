@@ -224,7 +224,6 @@ if uploaded_file:
             "Clustering (All Parameters)",
             "Correlation Between Key Parameters",
             "Bland-Altman Plots by Parameter and Side",
-            "Bland-Altman Pooled Plots for all parameters",
         ),
         index=0,
         help="Choose the type of analysis to perform on the uploaded data."
@@ -2658,78 +2657,3 @@ if uploaded_file:
                         unit=group_name.split("(")[-1].replace(")", "") if "(" in group_name else ""
                     )
                     st.pyplot(fig_pooled)
-                
-                
-    # ================================
-    # Bland-Altman Pooled Plots for all parameters
-    # ================================
-    elif analysis_type == "Bland-Altman Pooled Plots for all parameters":
-        st.subheader("📊 Bland-Altman Pooled Plots for Parameters with HALLUX, SESA, TM5")
-
-        from collections import defaultdict
-
-        param_groups = defaultdict(lambda: {"SESA": {}, "HALLUX": {}, "TM5": {}})
-
-        for key, label in target_rows.items():
-            for zone in ["SESA", "HALLUX", "TM5"]:
-                if zone in label:
-                    side = "R" if "R" in label else "L" if "L" in label else None
-                    if side:
-                        param_base = label.replace(zone, "").replace(" R", "").replace(" L", "").strip()
-                        param_groups[param_base][zone][side] = key
-        complete_params = {
-            param: zones for param, zones in param_groups.items()
-            if all(len(zones[z]) == 2 for z in ["SESA", "HALLUX", "TM5"])
-        }
-
-        def plot_bland_altman(data1, data2, title="", unit=""):
-            mean = (data1 + data2) / 2
-            diff = data1 - data2
-            md = np.mean(diff)
-            sd = np.std(diff)
-
-            fig, ax = plt.subplots(figsize=(6, 4))
-            ax.scatter(mean, diff, alpha=0.6)
-            ax.axhline(md, color='blue', linestyle='--', label='Mean')
-            ax.axhline(md + 1.96 * sd, color='red', linestyle='--', label='+1.96 SD')
-            ax.axhline(md - 1.96 * sd, color='red', linestyle='--', label='-1.96 SD')
-            ax.set_title(f"Bland-Altman: {title}")
-            ax.set_xlabel(f"Mean {unit}")
-            ax.set_ylabel("Difference")
-            ax.legend()
-            ax.grid(True)
-            return fig, md, sd
-
-        table_data = []
-
-        for param_name, zones in complete_params.items():
-            st.markdown(f"### 🔍 {param_name}")
-            pooled_r, pooled_l = [], []
-
-            for zone in ["SESA", "HALLUX", "TM5"]:
-                r_idx = zones[zone]["R"]
-                l_idx = zones[zone]["L"]
-
-                right_vals = df.loc[r_idx, 1:].astype(float)
-                left_vals = df.loc[l_idx, 1:].astype(float)
-
-                paired = [(r, l) for r, l in zip(right_vals, left_vals) if not (np.isnan(r) or np.isnan(l))]
-                if len(paired) > 0:
-                    r_clean, l_clean = zip(*paired)
-                    pooled_r.extend(r_clean)
-                    pooled_l.extend(l_clean)
-
-            pooled_r, pooled_l = np.array(pooled_r), np.array(pooled_l)
-            if len(pooled_r) == 0 or len(pooled_l) == 0:
-                st.warning(f"No valid data for {param_name}")
-                continue
-
-            fig, md, sd = plot_bland_altman(pooled_r, pooled_l, title=f"{param_name} (Pooled Zones)", unit="")
-            st.pyplot(fig)
-
-            pooled_mean = np.mean((pooled_r + pooled_l) / 2)
-            table_data.append((param_name, round(pooled_mean, 2), round(md, 2), round(1.96 * sd, 2)))
-
-        df_table = pd.DataFrame(table_data, columns=["Parameter", "Mean", "Mean Difference", "±1.96 SD"])
-        st.markdown("### 📋 Statistical Summary Table")
-        st.dataframe(df_table)
