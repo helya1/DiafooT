@@ -39,7 +39,7 @@ The project leverages clinical data stored in Excel file 📑 with a dedicated "
 
 1. Clone the repository:  
    ```bash
-   git clone https://github.com/master-csmi/2024-m2-project-aging-mobility](https://github.com/master-csmi/DIAFOOT.git)
+   git clone https://github.com/helya1/DiafooT.git
    ```
    
 2. Create a virtual environment and activate it:  
@@ -64,6 +64,7 @@ Run the app with:
 ```bash
 streamlit run dashboard.py
 ```
+
 
 
 ## Dashboard Code Explanation (`dashboard.py`) 
