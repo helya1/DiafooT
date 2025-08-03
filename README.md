@@ -35,8 +35,24 @@ The project leverages clinical data stored in Excel file 📑 with a dedicated "
 
 - **Analysis Dashboard**: [Diafoot Analysis](https://diafoot-analysis.streamlit.app/)
 
-## Quick Setup for Streamlit
+## Quick Setup 
 
+1. Clone the repository:  
+   ```bash
+   git clone https://github.com/master-csmi/2024-m2-project-aging-mobility](https://github.com/master-csmi/DIAFOOT.git)
+   ```
+   
+2. Create a virtual environment and activate it:  
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. Install the required dependencies:  
+   ```bash
+   pip install -r requirements.txt
+   ```
+   
 To set up the Streamlit application locally, follow these steps:
 
 ```bash
