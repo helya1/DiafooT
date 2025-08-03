@@ -105,19 +105,24 @@ st.markdown("""
         font-weight: 600;
     }
 
- /* Style for st.info */
+    /* Style for st.info, st.warning, st.error */
     .stAlert {
         border-radius: 10px;
         font-weight: 600;
     }
     /* Dark blue background for info box */
-    .stAlert[data-baseweb="toast"][class*="stAlert-info"] {
+    div[data-testid="stAlert"][kind="info"] {
         background-color: #1e3a8a !important;  /* deep blue */
         color: #ffffff !important;             /* white text */
     }
     /* Dark red background for error box */
-    .stAlert[data-baseweb="toast"][class*="stAlert-error"] {
+    div[data-testid="stAlert"][kind="error"] {
         background-color: #991b1b !important;  /* deep red */
+        color: #ffffff !important;             /* white text */
+    }
+    /* Deep orange background for warning box */
+    div[data-testid="stAlert"][kind="warning"] {
+        background-color: #d97706 !important;  /* deep orange */
         color: #ffffff !important;             /* white text */
     }
     
@@ -139,6 +144,58 @@ st.markdown("""
         font-weight: 600;
     }
 
+/* Table Styling */
+    .stTable table {
+        background-color: #ffffff; /* White background for table */
+        color: #000000; /* Black text */
+        border-radius: 10px;
+        border-collapse: separate;
+        border-spacing: 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    .stTable th {
+        background-color: #0a3d62; /* Deep navy sky blue for header */
+        color: #ffffff; /* White text for header */
+        font-weight: 600;
+        padding: 12px;
+    }
+    .stTable td {
+        padding: 12px;
+        border-bottom: 1px solid #e0e0e0; /* Light gray border */
+    }
+    .stTable tr:last-child td {
+        border-bottom: none; /* Remove border for last row */
+    }
+    .stTable tr:hover {
+        background-color: #e0f2fe; /* Light sky blue on hover */
+    }
+    /* Selectbox Styling */
+    div[data-testid="stSelectbox"] {
+        background-color: #000000; /* Black background for selectbox container */
+        border-radius: 10px;
+        padding: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+    div[data-testid="stSelectbox"] label {
+        color: #ffffff !important; /* White text for label */
+        font-weight: 600;
+    }
+    div[data-testid="stSelectbox"] select {
+        background-color: #000000; /* Black background for selectbox */
+        color: #ffffff; /* White text for selectbox */
+        border: 1px solid #e0e0e0; /* Light gray border */
+        border-radius: 8px;
+        padding: 8px;
+        font-weight: 600;
+        width: 100%;
+    }
+    div[data-testid="stSelectbox"] select option {
+        background-color: #000000; /* Black background for dropdown options */
+        color: #ffffff; /* White text for options */
+    }
+    div[data-testid="stSelectbox"] select option:hover {
+        background-color: #0a3d62; /* Deep navy sky blue on hover for options */
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -161,8 +218,7 @@ if uploaded_file:
             "Descriptive Analysis",
             "Normality Tests",
             "L/R Comparison by Anatomical Zone",
-            "Comparison of Left and Right Foot Parameters",
-            "Diabetic vs Control",            
+            "Comparison of Left and Right Foot Parameters",           
             "IWGDF Risk Grade Summary & Clustering",
             "Clustering (Important Parameters)",
             "Clustering (All Parameters)",
@@ -1165,181 +1221,6 @@ if uploaded_file:
             file_name="left_right_comparison.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # ================================
-    # 📐 Parameter Summary: Diabetic vs Control
-    # ================================
-    elif analysis_type == "Diabetic vs Control":
-        st.header("📊 Parameter Summary: Diabetic vs Control")
-        st.markdown("---")
-        st.caption("This section compares pooled left and right values between Diabetic Neuropathy and Control groups.")
-        st.caption("Metrics include Total Tissue Thickness, Plantar Pressure, and Stiffness across HALLUX, SESA, and TM5 regions.")
-        st.caption("Data is grouped using IWGDF classification (0 = Control, ≥1 = Diabetic Neuropathy).")
-        st.caption("Summary statistics include sample size, mean ± standard deviation, and observed range.")
-        st.markdown("---")
-
-        target_rows = {
-            17: "Height (m)", 18: "Weight (kg)", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
-            37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
-            94: "Amplitude of dorsiflexion of right MTP1 R",
-            95: "Amplitude of dorsiflexion of right MTP1 L", 96: "Amplitude talo-crurale R",
-            97: "Amplitude talo-crurale L",
-            108: "Avg Pressure Max SESA R", 109: "Avg Pressure Max HALLUX R",
-            110: "Avg Pressure Max TM5 R", 113: "Avg Pressure Max SESA L",
-            114: "Avg Pressure Max HALLUX L", 115: "Avg Pressure Max TM5 L",
-            118: "Stiffness SESA R", 119: "Stiffness HALLUX R", 120: "Stiffness TM5 R",
-            122: "Stiffness SESA L", 123: "Stiffness HALLUX L", 124: "Stiffness TM5 L",
-            126: "US Épaisseur ED SESA D", 127: "US Épaisseur ED HALLUX D", 128: "US Épaisseur ED TM5 D",
-            130: "US Épaisseur ED SESA G", 131: "US Épaisseur ED HALLUX G", 132: "US Épaisseur ED TM5 G",
-            134: "US Épaisseur Hypoderme SESA D", 135: "US Épaisseur Hypoderme HALLUX D",
-            136: "US Épaisseur Hypoderme TM5 D", 138: "US Épaisseur Hypoderme SESA G",
-            139: "US Épaisseur Hypoderme HALLUX G", 140: "US Épaisseur Hypoderme TM5 G",
-            142: "Total Tissue Thickness SESA R", 143: "Total Tissue Thickness HALLUX R",
-            144: "Total Tissue Thickness TM5 R", 146: "Total Tissue Thickness SESA L",
-            147: "Total Tissue Thickness HALLUX L", 148: "Total Tissue Thickness TM5 L",
-            150: "ROC SESA R", 151: "ROC HALLUX R", 152: "ROC TM5 R",
-            154: "ROC SESA L", 155: "ROC HALLUX L", 156: "ROC TM5 L",
-            212: "SUDOSCAN Hand R", 213: "SUDOSCAN Hand L", 214: "SUDOSCAN Foot R", 215: "SUDOSCAN Foot L",
-            19: "BMI", 24: "AOMI", 59: "Michigan Score", 72: "Charcot Sanders", 75: "ATCD Charcot Aigue D",
-            76: "ATCD Charcot Aigue G", 158: "Temperature Hallux D", 159: "Temperature 5th Toe D",
-            160: "Temperature Plantar Arch D", 161: "Temperature Lateral Sole D", 162: "Temperature Forefoot D",
-            163: "Temperature Heel D", 164: "Temperature Hallux G", 165: "Temperature 5th Toe G",
-            166: "Temperature Plantar Arch G", 167: "Temperature Lateral Sole G", 168: "Temperature Forefoot G",
-            169: "Temperature Heel G", 170: "Temperature Hand Mean D", 171: "Temperature Hand Mean G",
-        }
-
-        # ================== HALLUX ==================
-        epi_HD = pd.to_numeric(df.iloc[127].replace("NR", np.nan), errors="coerce")
-        epi_HG = pd.to_numeric(df.iloc[131].replace("NR", np.nan), errors="coerce")
-        hypo_HD = pd.to_numeric(df.iloc[135].replace("NR", np.nan), errors="coerce")
-        hypo_HG = pd.to_numeric(df.iloc[139].replace("NR", np.nan), errors="coerce")
-        total_HALLUX_R = epi_HD + hypo_HD
-        total_HALLUX_L = epi_HG + hypo_HG
-
-        # ================== DUROMETER HALLUX ==================
-        duro_HD = pd.to_numeric(df.iloc[119].replace("NR", np.nan), errors="coerce")
-        duro_HG = pd.to_numeric(df.iloc[123].replace("NR", np.nan), errors="coerce")
-
-        pooled_duro_hallux = pd.concat([duro_HD, duro_HG], ignore_index=True)
-
-        # ================== SESA ==================
-        epi_SD = pd.to_numeric(df.iloc[126].replace("NR", np.nan), errors="coerce")
-        epi_SG = pd.to_numeric(df.iloc[130].replace("NR", np.nan), errors="coerce")
-        hypo_SD = pd.to_numeric(df.iloc[134].replace("NR", np.nan), errors="coerce")
-        hypo_SG = pd.to_numeric(df.iloc[138].replace("NR", np.nan), errors="coerce")
-        total_SESA_R = epi_SD + hypo_SD
-        total_SESA_L = epi_SG + hypo_SG
-
-        # ================== TM5 ==================
-        epi_TD = pd.to_numeric(df.iloc[128].replace("NR", np.nan), errors="coerce")
-        epi_TG = pd.to_numeric(df.iloc[132].replace("NR", np.nan), errors="coerce")
-        hypo_TD = pd.to_numeric(df.iloc[137].replace("NR", np.nan), errors="coerce")
-        hypo_TG = pd.to_numeric(df.iloc[140].replace("NR", np.nan), errors="coerce")
-        total_TM5_R = epi_TD + hypo_TD
-        total_TM5_L = epi_TG + hypo_TG
-
-        # ================== DUROMETER SESA ==================
-        duro_SD = pd.to_numeric(df.iloc[118].replace("NR", np.nan), errors="coerce")
-        duro_SG = pd.to_numeric(df.iloc[122].replace("NR", np.nan), errors="coerce")
-        pooled_duro_sesa = pd.concat([duro_SD, duro_SG], ignore_index=True)
-
-        # ================== DUROMETER TM5 ==================
-        duro_TM5D = pd.to_numeric(df.iloc[120].replace("NR", np.nan), errors="coerce")
-        duro_TM5G = pd.to_numeric(df.iloc[124].replace("NR", np.nan), errors="coerce")
-        pooled_duro_tm5 = pd.concat([duro_TM5D, duro_TM5G], ignore_index=True)
-
-        # ================== PEAK PLANTAR PRESSURE: HALLUX (Toes) ==================
-        pressure_HALLUX_D = pd.to_numeric(df.iloc[109].replace("NR", np.nan), errors="coerce")
-        pressure_HALLUX_G = pd.to_numeric(df.iloc[114].replace("NR", np.nan), errors="coerce")
-        pooled_pressure_hallux = pd.concat([pressure_HALLUX_D, pressure_HALLUX_G], ignore_index=True)
-
-        # ================== PEAK PLANTAR PRESSURE: TM5 ==================
-        pressure_TM5_D = pd.to_numeric(df.iloc[110].replace("NR", np.nan), errors="coerce")
-        pressure_TM5_G = pd.to_numeric(df.iloc[115].replace("NR", np.nan), errors="coerce")
-        pooled_pressure_tm5 = pd.concat([pressure_TM5_D, pressure_TM5_G], ignore_index=True)
-
-        # ================== PEAK PLANTAR PRESSURE: FOREFOOT ==================
-        # We'll approximate forefoot pressure using "Pression MAX autre localisation"
-        pressure_forefoot_D = pd.to_numeric(df.iloc[112].replace("NR", np.nan), errors="coerce")
-        pressure_forefoot_G = pd.to_numeric(df.iloc[117].replace("NR", np.nan), errors="coerce")
-        pooled_pressure_forefoot = pd.concat([pressure_forefoot_D, pressure_forefoot_G], ignore_index=True)
-
-        # ================== PEAK PLANTAR PRESSURE: SESA ==================
-        pressure_SESA_D = pd.to_numeric(df.iloc[108].replace("NR", np.nan), errors="coerce")
-        pressure_SESA_G = pd.to_numeric(df.iloc[113].replace("NR", np.nan), errors="coerce")
-        pooled_pressure_sesa = pd.concat([pressure_SESA_D, pressure_SESA_G], ignore_index=True)
-
-        # ================== Combine (pooled L+R) ==================
-        pooled_hallux = pd.concat([total_HALLUX_R, total_HALLUX_L], ignore_index=True)
-        pooled_sesa = pd.concat([total_SESA_R, total_SESA_L], ignore_index=True)
-        pooled_tm5 = pd.concat([total_TM5_R, total_TM5_L], ignore_index=True)
-
-        # Reuse duplicated IWGDF (if already defined)
-        if 'iwgdf_pooled' not in locals():
-            iwgdf = pd.to_numeric(df.iloc[16], errors="coerce")
-            iwgdf_pooled = pd.Series(list(iwgdf) * 2, index=pooled_duro_hallux.index)
-
-        # ================== Group masks ==================
-        ctrl_mask = iwgdf_pooled == 0
-        neuro_mask = iwgdf_pooled >= 1
-
-        # ================== Summary Function ==================
-        def summarize(data, mask, label):
-            values = data[mask].dropna()
-            if len(values) == 0:
-                return {"Group": label, "N": 0, "Mean ± SD": "NA", "Range": "NA"}
-            return {
-                "Group": label,
-                "N": len(values),
-                "Mean ± SD": f"{values.mean():.2f} ± {values.std():.2f}",
-                "Range": f"[{values.min():.2f} – {values.max():.2f}]"
-            }
-
-        # ================== Build Result Table ==================
-        summary = [
-            summarize(pooled_hallux, ctrl_mask, "Total Thickness HALLUX - Control"),
-            summarize(pooled_hallux, neuro_mask, "Total Thickness HALLUX - Neuropath"),
-            summarize(pooled_sesa, ctrl_mask, "Total Thickness SESA (MS) - Control"),
-            summarize(pooled_sesa, neuro_mask, "Total Thickness SESA (MS) - Neuropath"),
-            summarize(pooled_tm5, ctrl_mask, "Total Thickness TM5 - Control"),
-            summarize(pooled_tm5, neuro_mask, "Total Thickness TM5 - Neuropath"),
-            summarize(pooled_duro_hallux, ctrl_mask, "Durometer HALLUX - Control"),
-            summarize(pooled_duro_hallux, neuro_mask, "Durometer HALLUX - Neuropath"),
-            summarize(pooled_duro_sesa, ctrl_mask, "Durometer SESA - Control"),
-            summarize(pooled_duro_sesa, neuro_mask, "Durometer SESA - Neuropath"),
-            summarize(pooled_duro_tm5, ctrl_mask, "Durometer TM5 - Control"),
-            summarize(pooled_duro_tm5, neuro_mask, "Durometer TM5 - Neuropath"),
-            summarize(pooled_pressure_sesa, ctrl_mask, "PPP SESA - Control"),
-            summarize(pooled_pressure_sesa, neuro_mask, "PPP SESA - Neuropath"),
-            summarize(pooled_pressure_tm5, ctrl_mask, "PPP TM5 - Control"),
-            summarize(pooled_pressure_tm5, neuro_mask, "PPP TM5 - Neuropath"),
-            summarize(pooled_pressure_hallux, ctrl_mask, "PPP Toes (Hallux + autres) - Control"),
-            summarize(pooled_pressure_hallux, neuro_mask, "PPP Toes (Hallux + autres) - Neuropath"),
-            summarize(pooled_pressure_forefoot, ctrl_mask, "PPP Avant-pied (Hallux + MT1–MT5) - Control"),
-            summarize(pooled_pressure_forefoot, neuro_mask, "PPP Avant-pied (Hallux + MT1–MT5) - Neuropath"),
-        ]
-
-        summary_df = pd.DataFrame(summary)
-        st.dataframe(summary_df)    
-        st.markdown("---")
-        
-        sns.set(style="whitegrid")
         
     # ================================
     # 📌 IWGDF Risk Grade Summary & KMeans Clustering
@@ -1423,13 +1304,9 @@ if uploaded_file:
 
         st.pyplot(fig)
 
-        st.markdown("ℹ️ **Chart Interpretation**")
-        st.info("""
-        - Each dot represents a patient.
-        """)
+        st.markdown("ℹ️Each dot represents a patient")
 
         param_cols = [c for c in df_combined.columns if c not in ["Grade", "Group", "Cluster", "PCA1", "PCA2"]]
-        st.write("Parameters to test:", param_cols)
 
         grade_pairs = [(0, 1), (1, 2), (2, 3)]
 
@@ -2118,12 +1995,10 @@ if uploaded_file:
             
             full_df = features_df.copy()
             true_labels = risk_values.reindex(full_df.index)
-            st.write(f"Initial number of features: {full_df.shape[1]}")
             
             # Clean data
             valid_features = full_df.isnull().sum() < full_df.shape[0] * 0.5
             full_df_cleaned = full_df.loc[:, valid_features]
-            st.write(f"Features after missing value filter: {full_df_cleaned.shape[1]}")
             
             full_df_cleaned = full_df_cleaned.loc[:, full_df_cleaned.count() >= 10]
             full_df_cleaned = full_df_cleaned.apply(lambda col: col.fillna(col.median()) if col.name != 'Patient_File_Number' else col, axis=0)
