@@ -76,7 +76,7 @@ st.markdown("""
 
     /* Sidebar */
     .sidebar .sidebar-content {
-        background: #0a3d62; /* deep navy sky blue */
+        background: #34d399; 
         border-radius: 14px;
         padding: 18px;
         box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
