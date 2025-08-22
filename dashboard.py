@@ -59,7 +59,7 @@ st.markdown("""
     <style>
     /* Global App Background */
     .stApp {
-        background: #e0f2fe; /* Light sky blue background */
+        background: #7dd3fc
         font-family: 'Roboto', sans-serif;
         color: #000000; /* Black text everywhere */
     }
