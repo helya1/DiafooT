@@ -526,21 +526,21 @@ if uploaded_file:
             
             risk_labels = ["Low", "Moderate", "High", "Very High"]
             palette = sns.color_palette("Blues", 4)
-
+            
             fig_grade, ax_grade = plt.subplots(figsize=(7, 4))
             bars = ax_grade.bar(range(4), grade_counts, color=palette, edgecolor='black', width=0.6)
-
+            
             # Customize axes and background
             ax_grade.set_xticks(range(4))
             ax_grade.set_xticklabels(risk_labels, fontsize=11)
             ax_grade.set_ylabel("Number of Patients", fontsize=12)
             ax_grade.set_title("IWGDF Risk Grade Distribution", fontsize=13, weight='bold')
-
-            # Remove top/right spines for a cleaner look
+            
+            # Remove top/right spines
             ax_grade.spines['top'].set_visible(False)
             ax_grade.spines['right'].set_visible(False)
             ax_grade.grid(axis='y', linestyle='--', alpha=0.5)
-
+            
             # Add value labels on top of bars
             for i, b in enumerate(bars):
                 ax_grade.text(
@@ -552,13 +552,13 @@ if uploaded_file:
                     fontsize=11,
                     fontweight='semibold'
                 )
-
+            
+            # Add legend
+            ax_grade.legend(bars, risk_labels, title="IWGDF Grades", fontsize=10, title_fontsize=11)
+            
             st.pyplot(fig_grade)
-
-        else:
-            st.warning("⚠️ IWGDF grade row not found.")
-    
-    
+            
+                
         # -------- Age of Diabetes by Type --------
 
         st.subheader("🩸 Age of Diabetes by Type")
