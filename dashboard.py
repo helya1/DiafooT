@@ -801,7 +801,6 @@ if uploaded_file:
         st.markdown("""
         - Tests if data come from a **normal distribution**.  
         - Works best for **small to medium samples** (n < 2000).  
-        - **W** → test statistic (closer to 1 means closer to normal).  
         """)
         st.latex(r"""
         W = \frac{\left( \sum_{i=1}^{n} a_i x_{(i)} \right)^2}{\sum_{i=1}^{n} (x_i - \bar{x})^2}
@@ -810,7 +809,6 @@ if uploaded_file:
         Where:  
         - $x_{(i)}$ = i-th ordered sample  
         - $a_i$ = constants from expected normal order statistics  
-        - $\bar{x}$ = sample mean  
         - $W$ close to 1 indicates normality
         """)
 
@@ -834,6 +832,12 @@ if uploaded_file:
         - $F(x)$ = cumulative distribution function of the reference distribution  
         - $D$ = maximum distance between sample and reference CDFs  
         - Smaller $D$ indicates a closer match to the reference distribution
+        """)
+        st.markdown("""
+        - **CDF (Cumulative Distribution Function)**: probability that a random variable is ≤ x  
+        - **Empirical CDF (F_n(x))**: calculated from your sample data  
+        - **Reference CDF (F(x))**: theoretical distribution you compare against (e.g., Normal)  
+        - The **Kolmogorov–Smirnov Test** measures the maximum vertical distance between these two CDFs.
         """)
         target_rows = {
             17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
