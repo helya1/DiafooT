@@ -391,6 +391,22 @@ if uploaded_file:
     # ================================
     if analysis_type == "Basic Analysis":
         st.header("📋 Basic Analysis")
+        
+        st.subheader("🔹 Average (Mean)")
+        st.latex(r"\bar{x} = \frac{1}{n} \sum_{i=1}^{n} x_i")
+        st.markdown("""
+        The **average (mean)** is the sum of all values divided by the number of values.  
+        It represents the **central value** of the dataset.
+        """)
+
+        st.subheader("🔹 Standard Deviation (SD)")
+        st.latex(r"s = \sqrt{\frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})^2}")
+        st.markdown("""
+        The **standard deviation** measures how much the values spread around the mean.  
+        - A **small SD** → values are close to the mean.  
+        - A **large SD** → values are more spread out.
+        """)
+
         target_rows = {
             6: "Date of Birth", 16: "Grade IWGDF", 17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI",
             35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L", 37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
@@ -442,7 +458,7 @@ if uploaded_file:
             fig, ax = plt.subplots(figsize=(8, 5))
             ax.hist(ages, bins=10, color='skyblue', edgecolor='black')
             ax.axvline(average_age, color='red', linestyle='dashed', linewidth=1, label=f'Mean: {average_age:.1f}')
-            ax.set_title("Patient Age Distribution")
+            ax.set_title("Histogram of patient age distribution")
             ax.set_xlabel("Age (years)")
             ax.set_ylabel("Count")
             ax.grid(True, linestyle='--', alpha=0.5)
@@ -471,6 +487,7 @@ if uploaded_file:
                 colors=['lightblue', 'lightpink', 'gray']
             )
             ax_gender.axis('equal')
+            ax_gender.set_title("Pie chart of patient gender distribution")
             st.pyplot(fig_gender)
             gender_percent_text = "\n".join(
                 [f"- {label}: {count} patients ({percent}%)" for label, count, percent in zip(valid_counts.index, valid_counts, percentages)]
@@ -495,7 +512,7 @@ if uploaded_file:
                 # BMI Histogram
                 fig_bmi, ax_bmi = plt.subplots(figsize=(6, 4))
                 sns.histplot(bmi_vals, kde=True, ax=ax_bmi, color="mediumseagreen", edgecolor="black", bins=20)
-                ax_bmi.set_title("BMI Distribution", fontsize=14)
+                ax_bmi.set_title("Histograms of BMI Distribution", fontsize=14)
                 ax_bmi.set_xlabel("BMI", fontsize=12)
                 ax_bmi.set_ylabel("Frequency", fontsize=12)
                 ax_bmi.set_yticks([0, 1, 2])
@@ -534,7 +551,7 @@ if uploaded_file:
             ax_grade.set_xticks(range(4))
             ax_grade.set_xticklabels(risk_labels, fontsize=11)
             ax_grade.set_ylabel("Number of Patients", fontsize=12)
-            ax_grade.set_title("IWGDF Risk Grade Distribution", fontsize=13, weight='bold')
+            ax_grade.set_title("Bar plot of IWGDF Risk Grade Distribution", fontsize=13, weight='bold')
 
             # Remove top/right spines for a cleaner look
             ax_grade.spines['top'].set_visible(False)
@@ -563,8 +580,8 @@ if uploaded_file:
         st.subheader("🩸 Age of Diabetes by Type")
         st.markdown("""
         This chart shows the **age at diagnosis** (i.e., "age of diabetes") across different **types of diabetes**:
-        - 🟦 **Type 1**: Autoimmune, usually early onset
-        - 🟨 **Type 2**: Metabolic, typically later onset
+        - 🟦 **Type 1**: Autoimmune
+        - 🟨 **Type 2**: Metabolic
         - 🟥 **Atypical (AT)**: Other/rare forms
         """)
         label_age = "Age du diabète (années)"
@@ -592,7 +609,7 @@ if uploaded_file:
                 sns.boxplot(data=df_diabetes, x="Type", y="AgeOnset", palette=palette, ax=ax_age_type)
                 sns.stripplot(data=df_diabetes, x="Type", y="AgeOnset", color='black', size=4, jitter=True, alpha=0.5, ax=ax_age_type)
 
-                ax_age_type.set_title("Distribution of Diabetes Age by Type", fontsize=13, weight='bold')
+                ax_age_type.set_title("Boxplot of Diabetes Age by Type", fontsize=13, weight='bold')
                 ax_age_type.set_ylabel("Age at Diagnosis (years)")
                 ax_age_type.set_xlabel("")
                 ax_age_type.grid(axis='y', linestyle='--', alpha=0.4)
@@ -612,9 +629,50 @@ if uploaded_file:
     # ================================
     elif analysis_type == "Descriptive Analysis":
         st.header("📊Descriptive Analysis")
-        st.markdown("---")
-        st.caption("📌 This section provides summary statistics (mean, median, std, min/max, quartiles) and normality tests (Shapiro-Wilk) for key biomechanical and clinical parameters collected from the DIAFOOT dataset.")
-        st.markdown("---")
+        
+        st.markdown("📌 This section provides summary statistics (mean, median, std, min/max, quartiles) and normality tests (Shapiro-Wilk) for key biomechanical and clinical parameters collected from the DIAFOOT dataset.")
+        
+                # --- Mean ---
+        st.subheader("🔹 Mean (Average)")
+        st.latex(r"\bar{x} = \frac{1}{n} \sum_{i=1}^{n} x_i")
+        st.markdown("The **mean** is the central value of the dataset, obtained by dividing the sum of all values by the number of values.")
+
+        # --- Median ---
+        st.subheader("🔹 Median")
+        st.latex(r"""
+        \text{Median} =
+        \begin{cases}
+        x_{\frac{n+1}{2}}, & \text{if $n$ is odd} \\
+        \frac{x_{\frac{n}{2}} + x_{\frac{n}{2}+1}}{2}, & \text{if $n$ is even}
+        \end{cases}
+        """)
+        st.markdown("The **median** is the middle value of the dataset when sorted. It is less affected by outliers than the mean.")
+
+        # --- Standard Deviation ---
+        st.subheader("🔹 Standard Deviation (SD)")
+        st.latex(r"s = \sqrt{\frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})^2}")
+        st.markdown("The **SD** measures the spread of the data around the mean. Small SD = values close to mean, large SD = values more spread out.")
+
+        # --- Quartiles ---
+        st.subheader("🔹 Quartiles (Q1, Q2, Q3)")
+        st.latex(r"Q_1 = 25^{th}\ percentile,\quad Q_2 = \text{Median},\quad Q_3 = 75^{th}\ percentile")
+        st.markdown("Quartiles divide the dataset into four equal parts: **Q1 (25%)**, **Q2 (50%, median)**, and **Q3 (75%)**.")
+
+        # --- Shapiro-Wilk ---
+        st.subheader("🔹 Shapiro-Wilk Normality Test")
+        st.latex(r"H_0: \text{ data are normally distributed}")
+        st.latex(r"H_1: \text{ data are not normally distributed}")
+        st.markdown("""
+                    The **Shapiro-Wilk test** checks if the data follow a normal distribution.
+                    - A p-value < 0.05 means the data are **not normal**.
+                    """)
+        
+        # --- Shapiro-Wilk ---
+        st.subheader("🔹 Deviation from the Mean")
+        st.latex(r"d_i = x_i - \bar{x}")
+        st.markdown(
+            "The **deviation from the mean** is the difference between each value and the average:"
+        )
         
         normal_params = []
         non_normal_params = []
@@ -731,17 +789,52 @@ if uploaded_file:
     # ================================
     elif analysis_type == "Normality Tests":
         st.header("📊 Normality Tests for DIAFOOT Parameters")
-
         st.markdown("""
-        **Normality Tests:**  
-        - Shapiro-Wilk Test: suitable for small to medium samples  
-        - Kolmogorov-Smirnov Test  
-        \n
-        **Interpretation:**  
-        - If p-value > 0.05 → data follows a normal distribution  
-        - If p-value ≤ 0.05 → data is non-normal, non-parametric tests are recommended  
+        - **Interpretation of p-value:**  
+        - **Null hypothesis (H₀):** data are normally distributed. 
+        - **p-value > 0.05** → Fail to reject H₀ → Data is approximately **normally** distributed  
+        - **p-value ≤ 0.05** → Reject H₀ → Data is **not normal** → Use non-parametric tests
         """)
 
+        # Shapiro-Wilk Test
+        st.markdown("### 🔹 Shapiro–Wilk Test")
+        st.markdown("""
+        - Tests if data come from a **normal distribution**.  
+        - Works best for **small to medium samples** (n < 2000).  
+        - **W** → test statistic (closer to 1 means closer to normal).  
+        """)
+        st.latex(r"""
+        W = \frac{\left( \sum_{i=1}^{n} a_i x_{(i)} \right)^2}{\sum_{i=1}^{n} (x_i - \bar{x})^2}
+        """)
+        st.markdown("""
+        Where:  
+        - $x_{(i)}$ = i-th ordered sample  
+        - $a_i$ = constants from expected normal order statistics  
+        - $\bar{x}$ = sample mean  
+        - $W$ close to 1 indicates normality
+        """)
+
+        # Kolmogorov–Smirnov (K–S) Test
+        st.markdown("---")
+        st.markdown("### 🔹 Kolmogorov–Smirnov (K–S) Test")
+        st.markdown("""
+        - Compares the sample distribution with a **reference distribution** (usually normal).  
+        - More sensitive to deviations in the **center** of the distribution.  
+        - Suitable for **larger samples**, but generally less powerful than Shapiro–Wilk.  
+        - **Null hypothesis (H₀):** sample distribution = reference distribution (e.g., normal).  
+        - **stat** → maximum distance between sample CDF and reference CDF.  
+        - **p-value** → probability of observing that distance if H₀ is true.  
+        """)
+        st.latex(r"""
+        D = \max_x | F_n(x) - F(x) |
+        """)
+        st.markdown("""
+        Where:  
+        - $F_n(x)$ = empirical cumulative distribution function of the sample  
+        - $F(x)$ = cumulative distribution function of the reference distribution  
+        - $D$ = maximum distance between sample and reference CDFs  
+        - Smaller $D$ indicates a closer match to the reference distribution
+        """)
         target_rows = {
             17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
             37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
@@ -834,11 +927,25 @@ if uploaded_file:
     # 📌 Hallux/SESA/TM5 – Left vs Right Comparison by Parameter Type
     # ================================
     elif analysis_type == "L/R Comparison by Anatomical Zone":
-        st.subheader("📊 Hallux/SESA/TM5 – L/R Comparison by Parameter Type")
-        st.markdown("---")
-        st.caption("This section compares left vs. right values across three anatomical zones (Hallux, SESA, TM5) for multiple parameter types (e.g., ultrasound thickness, pressure, stiffness). Significant differences (p < 0.05) are marked with * (* for p < 0.05, ** for p < 0.01, *** for p < 0.001). Numerical results are shown below each plot.")
-        st.markdown("---")
-        
+
+        st.markdown("""
+        ### 🔄 Left vs. Right Comparison  
+
+        This section compares **left vs. right foot values** across the three main anatomical zones:  
+
+        - 🦶 **Hallux**  
+        - 🦶 **SESA**  
+        - 🦶 **TM5**  
+
+        for multiple parameter families (e.g., **ultrasound thickness, plantar pressure, tissue stiffness**).  
+
+        **Statistical significance** is highlighted as:  
+        - * → p < 0.05  
+        - ** → p < 0.01  
+        - *** → p < 0.001  
+
+        📊 Numerical test results are displayed **below each plot** for clarity.  
+        """)
         # Epidermis + Dermis thickness values (manually selected rows)
         ep_derm_rows = {
             126: "Epiderm+Derm SESA D", 127: "Epiderm+Derm HALLUX D", 128: "Epiderm+Derm TM5 D",
@@ -1095,7 +1202,7 @@ if uploaded_file:
     # 📌 Comparison of Left and Right Foot Parameters
     # ================================
     elif analysis_type == "Comparison of Left and Right Foot Parameters":
-        st.header("Comparison of Left and Right Foot Parameters with Plots")
+        st.header("Comparison of Left and Right Foot Parameters with Box Plots")
         target_rows = {
             17: "Height (m)", 18: "Weight (kg)", 19: "BMI", 24: "AOMI", 35: "MESI Ankle Pressure R", 36: "MESI Ankle Pressure L",
             37: "MESI Big Toe Systolic Pressure Index R", 38: "MESI Big Toe Systolic Pressure Index L",
@@ -1138,16 +1245,47 @@ if uploaded_file:
                 if idx_l is not None:
                     paired_parameters.append((label_r, label_l, idx_r, idx_l))
 
-        st.subheader("🔬 Paired Tests + Boxplots")
+        st.markdown("---")
+        st.subheader("🔬 Paired Tests & Boxplots")
+
+        st.markdown("""
+        This section performs a **left vs. right foot comparison** for all matched biomechanical and clinical parameters.  
+
+        - ✅ **Automatic Pairing** – Detects parameter pairs (e.g., *Stiffness TM5 R* ↔ *Stiffness TM5 L*) based on zone and side.  
+        - 🧪 **Statistical Testing** – Normality is checked with the **Shapiro–Wilk test**.  
+        - If data are normal → **Paired t-test**  
+        - If not normal → **Wilcoxon signed-rank test**  
+        - 📊 **Visualization** – Side-by-side **boxplots** show the distributions of left vs. right values for each zone and parameter.  
+        - 💾 **Export** – Results (means, medians, p-values, and test type) can be saved to **Excel** for reporting.  
+        """)
+
+        st.markdown("""
+        ### 🔹 Explanation of Statistic
+
+        - **Paired t-test: t** → measures the standardized difference between the means of paired samples.
+        - n → number of pairs
+        """)
+        st.markdown("- $d_i = x_i - y_i$ → difference between each pair")
+        st.markdown("- $\\bar{d} = \\frac{1}{n} \\sum_{i=1}^{n} d_i$ → mean of the differences")
+        st.markdown("- $s_d = \\sqrt{\\frac{1}{n-1} \\sum_{i=1}^{n} (d_i - \\bar{d})^2}$ → standard deviation of differences")
+
+        st.latex(r"""
+        t = \frac{\bar{d}}{s_d / \sqrt{n}}, \quad 
+        """)
+
+        st.markdown("""
+        - **Wilcoxon signed-rank test: W** → sum of ranks of positive differences between pairs.
+        """)
+        st.latex(r"""
+        W = \sum_{d_i > 0} \mathrm{rank}(|d_i|), \quad d_i = x_i - y_i
+        """)
+
+        st.markdown("""
+        - In both tests, the **p-value** tells you whether the difference is statistically significant.
+        """)
+
         
         st.markdown("---")
-        st.caption("🔍 This section compares left and right foot values for all matched biomechanical and clinical parameters.")
-        st.caption("- It automatically detects parameter pairs (e.g., 'Stiffness TM5 R' vs. 'Stiffness TM5 L') based on zone and side.")
-        st.caption("- Normality is tested using the Shapiro-Wilk test, followed by a paired t-test or Wilcoxon test depending on distribution.")
-        st.caption("- Side-by-side boxplots visualize the distributions of left and right values for each zone and parameter.")
-        st.caption("- All test results — including means, medians, p-values, and test type — can be exported in Excel format.")
-        st.markdown("---")
-
         comparison_results = []
         for label_r, label_l, idx_r, idx_l in paired_parameters:
             values_r = pd.to_numeric(df.iloc[idx_r, 1:], errors='coerce').dropna()
