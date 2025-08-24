@@ -78,15 +78,6 @@ st.markdown("""
     .streamlit-expanderContent {
         color: black !important;
     }
-
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #c94b62; 
-        border-radius: 14px;
-        padding: 18px;
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-        color: #ffffff; /* White text for contrast */
-    }
     
     /* Buttons */
     .stButton>button {
