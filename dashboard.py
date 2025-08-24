@@ -59,7 +59,7 @@ st.markdown("""
     <style>
     /* Global App Background */
     .stApp {
-        background: #9ddafc;
+        background: #8dc4e3;
         font-family: 'Roboto', sans-serif;
         color: #000000; /* Black text everywhere */
     }
@@ -79,28 +79,30 @@ st.markdown("""
         color: black !important;
     }
 
-    /* Sidebar */
-    .sidebar .sidebar-content {
-        background: #34d399; 
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #c94b62; 
         border-radius: 14px;
         padding: 18px;
         box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
-        color: #000000; /* Black text */
+        color: #ffffff; /* White text for contrast */
     }
     
     /* Buttons */
     .stButton>button {
-        background: #e0f2fe; /* Light sky blue background */
-        color: #000000; /* Black text */
+        background: #38bdf8; /* Bright sky blue */
+        color: #ffffff;      /* White text for contrast */
         border-radius: 10px;
         padding: 12px 22px;
         font-weight: 600;
         border: none;
         font-size: 1em;
         transition: all 0.3s ease;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08); /* subtle depth */
     }
+
     .stButton>button:hover {
-        background: #0a3d62; /* deep navy sky blue */
+        background: #0ea5e9; /* Richer blue on hover */
         transform: scale(1.05);
     }
 
@@ -149,7 +151,7 @@ st.markdown("""
         font-weight: 600;
     }
 
-/* Table Styling */
+    /* Table Styling */
     .stTable table {
         background-color: #ffffff; /* White background for table */
         color: #000000; /* Black text */
@@ -176,7 +178,7 @@ st.markdown("""
     }
     /* Selectbox Styling */
     div[data-testid="stSelectbox"] {
-        background-color: #000000; /* Black background for selectbox container */
+        background-color: #f1f5f9; /* Light slate grey */
         border-radius: 10px;
         padding: 8px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
@@ -556,7 +558,7 @@ if uploaded_file:
             ax_grade.set_xticks(range(4))
             ax_grade.set_xticklabels(risk_labels, fontsize=11)
             ax_grade.set_ylabel("Number of Patients", fontsize=12)
-            ax_grade.set_title("Bar plot of IWGDF Risk Grade Distribution", fontsize=13, weight='bold')
+            ax_grade.set_title("IWGDF Risk Grade Distribution", fontsize=13, weight='bold')
 
             # Remove top/right spines for a cleaner look
             ax_grade.spines['top'].set_visible(False)
