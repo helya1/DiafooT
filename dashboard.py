@@ -74,6 +74,11 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
+    /* Target expander content text */
+    .streamlit-expanderContent {
+        color: black !important;
+    }
+
     /* Sidebar */
     .sidebar .sidebar-content {
         background: #34d399; 
@@ -1438,7 +1443,7 @@ if uploaded_file:
         ax.set_ylabel("IWGDF Grade")
         ax.set_title("Clustering Colored by Cluster")
         # Set x-axis ticks from 1 to 20
-        ax.set_xticks(np.arange(1, 21, 1))
+        ax.set_xticks(np.arange(1, 22, 1))
         # Set y-axis ticks at 0, 1, 2, 3
         ax.set_yticks(np.arange(0, 4, 1)) 
 
@@ -1497,6 +1502,49 @@ if uploaded_file:
 
         st.header("Statistical Tests Between Combined Grades")
 
+        st.markdown("""
+        ### 📊 Statistical Test: Independent t-test
+        - Used because **both groups are normally distributed** (p > 0.05 in Shapiro-Wilk).
+        - **Hypothesis**:  
+        - H₀: μ₁ = μ₂ (no difference in means)  
+        - H₁: μ₁ ≠ μ₂ (means are different)  
+
+        - **Formula for t-statistic**:  
+
+        $$
+        t = \\frac{\\bar{X}_1 - \\bar{X}_2}{\\sqrt{\\frac{s_1^2}{n_1} + \\frac{s_2^2}{n_2}}}
+        $$
+
+        Where:
+        - $\\bar{X}_1, \\bar{X}_2$: sample means  
+        - $s_1^2, s_2^2$: variances  
+        - $n_1, n_2$: sample sizes  
+        """)
+
+        st.markdown("""
+        ### 📊 Statistical Test: Mann–Whitney U
+        - Used because **at least one group is not normally distributed** (p ≤ 0.05 in Shapiro-Wilk).
+        - **Hypothesis**:  
+        - H₀: The distributions of the two groups are the same  
+        - H₁: The distributions differ  
+
+        - **Formula for U-statistic**:  
+
+        $$
+        U_1 = n_1 n_2 + \\frac{n_1(n_1 + 1)}{2} - R_1
+        $$
+        $$
+        U_2 = n_1 n_2 + \\frac{n_2(n_2 + 1)}{2} - R_2
+        $$
+        $$
+        U = \\min(U_1, U_2)
+        $$
+
+        Where:
+        - $n_1, n_2$: sample sizes  
+        - $R_1, R_2$: sum of ranks for each group  
+        """)
+        st.markdown("---")
         param_cols = [c for c in df_combined.columns if c not in ["Grade", "Group", "Cluster", "PCA1", "PCA2"]]
 
         df_combined['Grade_combined'] = df_combined['Grade'].apply(lambda x: 'A (0-1)' if x in [0, 1] else ('B (2-3)' if x in [2, 3] else np.nan))
@@ -1734,11 +1782,74 @@ if uploaded_file:
         """)
         
         st.markdown("---")
-        st.caption("Agglomerative (ward): Hierarchically merges clusters by minimizing variance within clusters.")
-        st.caption("Agglomerative (average): Hierarchically merges clusters using average distance between points.")
-        st.caption("KMeans: Partitions data into k clusters by minimizing distance to cluster centroids.")
-        st.caption("Gaussian Mixture Model: Clusters data using probabilistic Gaussian distributions.")
+
+        st.markdown("Agglomerative (ward): Hierarchically merges clusters by minimizing variance within clusters.")
+        with st.expander("Agglomerative (Ward)"):st.markdown("""
+        - Builds clusters step by step (hierarchical).  
+        - At each step, merges the two clusters that **minimize the increase of variance** inside clusters.  
+
+        **Formula (Ward’s criterion):**  
+
+        $$
+        \\Delta (C_i, C_j) = \\frac{n_i n_j}{n_i + n_j} \\, ||\\bar{x}_i - \\bar{x}_j||^2
+        $$  
+
+        Where:  
+        - $n_i, n_j$: sizes of clusters $C_i$ and $C_j$  
+        - $\\bar{x}_i, \\bar{x}_j$: centroids of clusters  
+        """)
+        
+        st.markdown("Agglomerative (average): Hierarchically merges clusters using average distance between points.")
+        with st.expander("Agglomerative (Average)"):st.markdown("""
+        - Hierarchical method too.  
+        - At each step, merges the clusters with the **smallest average distance** between their points.  
+
+        **Formula (Average linkage):**  
+
+        $$
+        d(C_i, C_j) = \\frac{1}{n_i n_j} \\sum_{x \\in C_i} \\sum_{y \\in C_j} d(x,y)
+        $$  
+
+        Where:  
+        - $d(x,y)$ is the distance between points $x$ and $y$.  
+        """)
+
+        st.markdown("KMeans: Partitions data into k clusters by minimizing distance to cluster centroids.")
+        
+        with st.expander("KMeans"):st.markdown("""
+        - Splits the data into **k clusters**.  
+        - Each point is assigned to the nearest cluster center (centroid).  
+        - The algorithm updates centroids to minimize the total distance.  
+
+        **Objective function:**  
+
+        $$
+        J = \\sum_{i=1}^k \\sum_{x \\in C_i} ||x - \\mu_i||^2
+        $$  
+
+        Where:  
+        - $\\mu_i$ = centroid of cluster $C_i$.  
+        """)
+        
+        st.markdown("Gaussian Mixture Model: Clusters data using probabilistic Gaussian distributions.")
+        with st.expander("Gaussian Mixture Model (GMM)"):st.markdown("""
+        - Assumes data comes from a mix of several Gaussian distributions.  
+        - Each point has a **probability** of belonging to each cluster.  
+
+        **Probability density:**  
+
+        $$
+        p(x) = \\sum_{i=1}^k \\pi_i \\, \\mathcal{N}(x \\,|\\, \\mu_i, \\Sigma_i)
+        $$  
+
+        Where:  
+        - $\\pi_i$ = weight (mixing coefficient)  
+        - $\\mu_i$ = mean of Gaussian $i$  
+        - $\\Sigma_i$ = covariance of Gaussian $i$.  
+        """)
+
         st.markdown("---")
+
         
         metrics_with = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
         metrics_without = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
@@ -1838,6 +1949,10 @@ if uploaded_file:
 
         # Run clustering for both cases
         st.subheader("Clustering Comparison: With and Without IWGDF Grade")
+        st.markdown("""
+            - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star). Each point is annotated with the patient file number.
+            - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on biomechanical, vascular, and thermal parameters. Same color/symbol scheme for comparison, with patient file numbers annotated.
+        """)
         run_clustering(X_scaled_with, full_df_cleaned_with, true_labels, coords_with, "With Grade", axes, 0, feature_importance_dict_with)
         run_clustering(X_scaled_without, full_df_cleaned_without, true_labels, coords_without, "Without Grade", axes, 1, feature_importance_dict_without)
 
@@ -1847,6 +1962,96 @@ if uploaded_file:
         st.pyplot(fig)
         plt.close(fig)  # Close figure to free memory
 
+
+        st.markdown("---")
+        st.markdown("## 📊 Clustering Evaluation Metrics")
+        st.markdown("""
+        - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
+        - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
+        - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
+        - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
+        - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
+        """)
+        
+        with st.expander("Silhouette Score"):st.markdown("""
+        - Measures how well each point fits in its cluster compared to other clusters.  
+        - Ranges from **-1 to 1** (higher is better).  
+
+        **Formula:**  
+
+        $$
+        s(i) = \\frac{b(i) - a(i)}{\\max(a(i), b(i))}
+        $$  
+
+        Where:  
+        - $a(i)$ = average distance of point $i$ to others in the same cluster  
+        - $b(i)$ = average distance of point $i$ to the nearest other cluster  
+        """)
+
+        with st.expander("Calinski–Harabasz Index (CH)"):st.markdown("""
+        - Ratio of **between-cluster variance** to **within-cluster variance**.  
+        - Higher values mean clusters are dense and well separated.  
+
+        **Formula:**  
+
+        $$
+        CH = \\frac{Tr(B_k)}{Tr(W_k)} \\times \\frac{n-k}{k-1}
+        $$  
+
+        Where:  
+        - $Tr(B_k)$ = between-cluster dispersion  
+        - $Tr(W_k)$ = within-cluster dispersion  
+        - $n$ = number of points  
+        - $k$ = number of clusters  
+        """)
+
+        with st.expander("Davies–Bouldin Index (DB)"):st.markdown("""
+        - Measures average similarity between clusters (lower is better).  
+        - A similarity is the ratio of **within-cluster scatter** to **between-cluster separation**.  
+
+        **Formula:**  
+
+        $$
+        DB = \\frac{1}{k} \\sum_{i=1}^k \\max_{j \\neq i} \\frac{\\sigma_i + \\sigma_j}{d(c_i, c_j)}
+        $$  
+
+        Where:  
+        - $\\sigma_i$ = average distance of points in cluster $i$ to centroid $c_i$  
+        - $d(c_i, c_j)$ = distance between centroids  
+        """)
+
+        with st.expander("Adjusted Rand Index (ARI)"):st.markdown("""
+        - Compares how similar clustering results are to a **reference (ground truth)**.  
+        - Adjusted for chance, ranges from **-1 to 1** (higher = better agreement).  
+
+        **Formula:**  
+
+        $$
+        ARI = \\frac{RI - E[RI]}{\\max(RI) - E[RI]}
+        $$  
+
+        Where:  
+        - $RI$ = Rand Index (agreement between pairs of points)  
+        - $E[RI]$ = expected Rand Index under random labeling  
+        """)
+
+        with st.expander("Normalized Mutual Information (NMI)"):st.markdown("""
+        - Measures how much information is shared between clustering results and ground truth.  
+        - Normalized to range between **0 and 1** (higher = better).  
+
+        **Formula:**  
+
+        $$
+        NMI(U,V) = \\frac{2 \\, I(U;V)}{H(U) + H(V)}
+        $$  
+
+        Where:  
+        - $I(U;V)$ = mutual information between cluster labels $U$ and $V$  
+        - $H(U), H(V)$ = entropy of clusterings  
+        """)
+
+        st.markdown("---")
+        
         # Display metrics
         st.write("### Clustering Metrics (With IWGDF Grade)")
         metrics_df_with = pd.DataFrame(metrics_with).sort_values(by="Silhouette", ascending=False)
@@ -1855,6 +2060,31 @@ if uploaded_file:
         st.write("### Clustering Metrics (Without IWGDF Grade)")
         metrics_df_without = pd.DataFrame(metrics_without).sort_values(by="Silhouette", ascending=False)
         st.dataframe(metrics_df_without.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
+
+        st.markdown("---")
+        st.markdown("## 📊 Confusion Matrix")
+
+        with st.expander("What is a Confusion Matrix?"):st.markdown("""
+        - A **table** used to evaluate classification performance.  
+        - Shows how many predictions were **correct** and where the model made **errors**.  
+        - Rows = **actual labels**, Columns = **predicted labels**.  
+
+        For a **binary classification** (2 classes):  
+
+        |                | Predicted Positive | Predicted Negative |
+        |----------------|-------------------|-------------------|
+        | **Actual Positive** | True Positive (TP) | False Negative (FN) |
+        | **Actual Negative** | False Positive (FP) | True Negative (TN) |
+
+
+        ---
+        ### 🔹 Multiclass Case
+        - The matrix extends to a **k × k table** (k = number of classes).  
+        - Each diagonal cell = correctly predicted class.  
+        - Off-diagonal cells = misclassifications.  
+        """)
+
+        st.markdown("---")
 
         # Display confusion matrices in one figure
         st.write("### Confusion Matrices (All IWGDF Grades vs Clusters)")
@@ -1880,7 +2110,58 @@ if uploaded_file:
         plt.close(fig)  # Close figure to free memory
 
         # Outlier Analysis
-        st.write("### Outlier Analysis")
+        st.write("## 🚨 Outlier Analysis")
+        with st.expander("What is Outlier Analysis?"):st.markdown("""
+        - **Outliers** are data points that are very different from the rest of the dataset.  
+        - They may come from **measurement errors**, **rare events**, or **true anomalies**.  
+        - Detecting outliers is important because they can **bias statistical tests, clustering, or machine learning models**.  
+
+        ---
+        ### 🔹 Method for Detecting Outliers:
+        #### 🌲 Outlier Analysis with Isolation Forest
+        - An **anomaly detection method** based on the idea that:  
+        - Outliers are **few** and **different**.  
+        - They can be isolated (separated) faster than normal points.  
+        - Works by building many **random decision trees**.  
+        - The **path length** (number of splits) needed to isolate a point tells if it is an outlier.  
+
+        ---
+        ### 🔹 How It Works
+        1. Randomly select a feature and a split value.  
+        2. Build many trees (ensemble).  
+        3. Compute the **average path length** $h(x)$ for each point.  
+        - Outliers → shorter paths (easy to isolate).  
+        - Normal points → longer paths (harder to isolate).  
+
+        ---
+        ### 🔹 Anomaly Score
+        The anomaly score of a data point $x$ is:  
+
+        $$
+        s(x, n) = 2^{-\\frac{E(h(x))}{c(n)}}
+        $$  
+
+        Where:  
+        - $E(h(x))$ = average path length of $x$ over all trees  
+        - $c(n)$ = average path length in a random binary search tree with $n$ points  
+
+        **Interpretation:**  
+        - $s(x) \\to 1$: point is very likely an outlier  
+        - $s(x) < 0.5$: point is likely normal  
+
+        ---
+        ### 🔹 In my Code
+        - `contamination=0.1` → assumes 10% of data are outliers  
+        - To decide which points are outliers, we need a threshold.
+        - The parameter contamination tells the model what proportion of the dataset is expected to be outliers.
+        ---
+
+        ### 🔹 Why Outlier Analysis Matters
+        - Helps improve **data quality**.  
+        - Avoids misleading **statistical conclusions**.  
+        - Useful in detecting **fraud, anomalies, or rare medical conditions**.  
+        """)
+        
         iso_forest = IsolationForest(contamination=0.1, random_state=42)
         outlier_labels = iso_forest.fit_predict(X_scaled_without)
         outliers = full_df_cleaned_without[outlier_labels == -1]
@@ -1889,12 +2170,23 @@ if uploaded_file:
         st.dataframe(outliers[['Patient_File_Number']])
 
         # IWGDF Group Homogeneity Analysis
-        st.write("### IWGDF Group Homogeneity Analysis")
-        
+        st.write("## 🧩 IWGDF Group Homogeneity Analysis")
         # Calculate within-group inertia
         inertia = calculate_inertia(X_scaled_without, true_labels)
         st.write(f"Within-group inertia for IWGDF groups: {inertia:.3f}")
-        st.write("**Interpretation**: Within-group inertia measures the compactness of IWGDF groups. The value suggests moderate to high variability within grades, indicating that points within each IWGDF grade are relatively spread out from their centroid.")
+        
+        with st.expander("What does this mean?"):st.markdown("""
+        - **Within-group inertia** quantifies how tightly the data points in each group are clustered around their group’s center (centroid).  
+        - A **low value** → points are compact, groups are homogeneous.  
+        - A **high value** → points are spread out, groups are heterogeneous.  
+
+        ### 🔹 Interpretation for IWGDF grades
+        - The value **43.875** indicates **moderate to high variability** inside IWGDF grades.  
+        - This means that patients **within the same risk grade** show noticeable differences in biomechanical/clinical parameters.  
+        - In other words, while IWGDF grades group patients by risk level, the **internal spread is still significant**, suggesting heterogeneity within each grade.  
+        """)
+
+        st.markdown("---")
 
         # Check sample sizes per IWGDF grade
         grade_counts = true_labels.value_counts().sort_index()
@@ -1902,30 +2194,142 @@ if uploaded_file:
         st.write(grade_counts)
         st.write("**Note**: MANOVA requires sufficient samples per group (typically > number of features). If any grade has very few samples, results may be unreliable.")
 
-        # MANOVA with IWGDF grade as factor
-        st.write("#### MANOVA with IWGDF Grade as Factor")
-        manova_data = full_df_cleaned_without.drop(columns=['Patient_File_Number']).copy()
-        manova_data['IWGDF'] = true_labels
-        formula = ' + '.join(full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns) + ' ~ IWGDF'
+        with st.expander("What is MANOVA?"):st.markdown("""
+        - **MANOVA (Multivariate Analysis of Variance)** tests whether the means of **multiple dependent variables** differ across groups defined by a factor (here, IWGDF grade).  
+        - Extends ANOVA to handle multiple outcomes simultaneously.
+        
+        ### 🔹 Interpretation
+        - If **p-value < 0.05** (or 0), the multivariate group differences are statistically significant.  
+        - Here, a very small p-value suggests that **IWGDF grades are well-separated** in the multivariate space of biomechanical parameters.   
+
+        ### 🔹 Key Test Statistics
+        - **Pillai’s Trace**, **Wilks’ Lambda**, **Hotelling-Lawley Trace**, **Roy’s Largest Root**  
+        - All measure the degree of separation between group centroids in multivariate space.  
+
+        ### 🔹 Formula
+        MANOVA is based on partitioning total variation:
+
+        $$
+        T = W + B
+        $$
+
+        Where:  
+        - $T$ = total sum of squares and cross-products (SSCP) matrix  
+        - $W$ = within-group SSCP matrix  
+        - $B$ = between-group SSCP matrix
+
+        **Wilks’ Lambda** (one common test statistic):
+
+        $$
+        \\Lambda = \\frac{|W|}{|T|} = \\frac{|W|}{|W + B|}
+        $$
+
+        - Smaller $\\Lambda$ → stronger evidence that group means differ.  
+        - Pillai’s Trace, Hotelling-Lawley, Roy’s Largest Root are alternative ways to summarize $W$ and $B$.
+        """)
+
+        # Prepare data: drop patient IDs, add IWGDF labels
+        manova_df = full_df_cleaned_without.drop(columns=['Patient_File_Number']).copy()
+        manova_df['IWGDF'] = pd.Categorical(true_labels)
+
+        # Ensure all dependent variables are numeric (coerce bad values -> NaN, then drop)
+        dep_vars = manova_df.columns.drop('IWGDF')
+        manova_df[dep_vars] = manova_df[dep_vars].apply(pd.to_numeric, errors='coerce')
+        manova_df = manova_df.dropna(subset=dep_vars)
+
+        # Build formula for MANOVA
+        formula = f"{' + '.join(dep_vars)} ~ IWGDF"
+
         try:
-            manova = MANOVA.from_formula(formula, data=manova_data)
-            manova_result = manova.mv_test()
-            st.write("MANOVA Results:")
-            st.write(manova_result)
-            st.write("**Interpretation**: A p-value of 0 (or <0.001) across all test statistics (e.g., Pillai’s Trace, Wilks’ Lambda) indicates highly significant differences between IWGDF groups, suggesting they are well-separated in the multivariate parameter space. However, verify data quality (e.g., sufficient samples per group, no multicollinearity) to ensure reliability.")
+            manova = MANOVA.from_formula(formula, data=manova_df)
+            res = manova.mv_test()
+
+            # Extract the clean stats table for the IWGDF effect and display nicely
+            stat_tbl = res.results['IWGDF']['stat'].rename_axis("Test")
+            st.write("### MANOVA Results (effect of IWGDF)")
+            st.dataframe(stat_tbl, use_container_width=True)
+
+            # Optional: raw statsmodels output in an expander
+            with st.expander("Raw statsmodels output"):
+                st.text(str(res))
+
+            st.markdown("""
+            **How to read the table:** p-values are in the **Pr > F** column. 
+            Smaller Wilks’ λ indicates stronger group separation; Pillai, Hotelling–Lawley, and Roy are alternative multivariate tests.
+            """)
+
         except Exception as e:
-            st.warning(f"MANOVA failed: {str(e)}. Check data for sufficient samples, valid features, or multicollinearity.")
+            st.warning(f"MANOVA failed: {e}. Check sample sizes, numeric columns, or multicollinearity.")
 
         # Silhouette score for IWGDF labels as imposed clusters
         silhouette_iwgdf = silhouette_score(X_scaled_without, true_labels)
-        st.write(f"Silhouette Score for IWGDF labels as imposed clusters: {silhouette_iwgdf:.3f}")
-        st.write("**Interpretation**: A low Silhouette Score (close to 0) indicates high overlap between IWGDF groups, suggesting poor separation. A higher score (>0.5) suggests well-defined groups.")
+
+        st.write(f"## Silhouette Score for IWGDF-Imposed Clusters")
+        st.write(f"**Score:** {silhouette_iwgdf:.3f}")
+
+        st.markdown("""
+        **Interpretation:**  
+        - A low Silhouette Score (≈ 0) indicates **high overlap** between IWGDF groups → poor separation.  
+        - A higher score (> 0.5) indicates **well-defined, distinct groups**.  
+        """)
 
         # Parameter Importance Analysis
-        st.write("### Parameter Importance Analysis")
-        
+        st.write("## 📌 Parameter Importance Analysis")
+        st.markdown("""
+        Feature importance in clustering analysis indicates **how much each parameter contributes to the separation of clusters**.  
+        - In unsupervised clustering, the algorithm identifies patterns in the data without using labels.  
+        - By analyzing the variance or contribution of each feature to the cluster assignments, we can rank parameters that most influence the grouping of patients.  
+        - Here, we show the **top 5 most important parameters** for each clustering algorithm.
+        """)
         # LASSO Regression for automatic variable selection
-        st.write("#### Logistic Regression with LASSO Regularization")
+        st.write("### 🔹 Logistic Regression with LASSO Regularization")
+
+        with st.expander("What this method does (intuitive + formulas)"):
+            st.markdown(r"""
+        **Goal.** Predict the class (here, *IWGDF grade*) from many features while **automatically selecting** the most informative ones.
+
+        **Model.** Logistic regression models the probability of the positive class as
+
+        $$
+        p_i = \Pr(y_i = 1 \mid \mathbf{x}_i) 
+        = \sigma(\mathbf{x}_i^\top \boldsymbol\beta) 
+        = \frac{1}{1 + e^{-\mathbf{x}_i^\top \boldsymbol\beta}}
+        $$
+
+        where:
+        - $\sigma(\cdot)$ = logistic (sigmoid) function  
+        - $\mathbf{x}_i$ = feature vector for sample $i$  
+        - $\boldsymbol\beta$ = coefficients to estimate  
+
+        ---
+
+        **LASSO-penalized loss function (negative log-likelihood + L1 penalty):**
+
+        $$
+        \mathcal{L}(\boldsymbol\beta) =
+        -\frac{1}{n}\sum_{i=1}^n \Big[
+        y_i \log(p_i) + (1-y_i)\log(1-p_i)
+        \Big]
+        \;+\; \lambda \sum_{j=1}^p |\beta_j|
+        $$
+
+        - First term = logistic regression loss  
+        - Second term = **L1 penalty** → encourages sparsity (coefficients driven to exactly zero)  
+
+        ---
+
+        **scikit-learn parameterization:**
+
+        $$
+        C = \frac{1}{\lambda}
+        $$
+
+        - Smaller $C$ ⇒ stronger penalty ⇒ fewer features selected  
+        - Larger $C$ ⇒ weaker penalty ⇒ more features retained  
+
+        **Why standardize features?** L1 compares coefficient magnitudes across features; scaling puts features on the same footing so the penalty is fair.
+        """)       
+
         try:
             lasso = LogisticRegression(penalty='l1', solver='liblinear', random_state=42)
             lasso.fit(X_scaled_without, true_labels)
@@ -1937,8 +2341,69 @@ if uploaded_file:
         except Exception as e:
             st.warning(f"LASSO regression failed: {str(e)}. Check data for valid features or sufficient samples.")
 
+
         # Random Forest Classifier for feature importance
-        st.write("#### Random Forest Classifier Feature Importance")
+        st.write("### 🔹Random Forest Classifier Feature Importance")
+        
+        with st.expander("What does 'feature importance' mean here? (with formulas)"):
+            st.markdown(r"""
+        Random Forests average many decision trees. Each split reduces **impurity** (mixing of classes).  
+        A feature is considered **important** if it frequently produces **large impurity decreases** across the forest.
+
+        ---
+
+        #### 1) Node Impurity (classification)
+        Most implementations use **Gini impurity**:
+        $$
+        G(t)=1-\sum_{k=1}^{K} p_{k}(t)^2,
+        $$
+        or sometimes **entropy**:
+        $$
+        H(t)=-\sum_{k=1}^{K} p_{k}(t)\,\log p_{k}(t),
+        $$
+        where \(p_k(t)\) is the proportion of class \(k\) among samples reaching node \(t\).
+
+        #### 2) Impurity Decrease from a Split
+        For a node \(t\) split by feature \(j\) into left/right children \(t_L,t_R\):
+        $$
+        \Delta i(s,t) \;=\; i(t)\;-\;\frac{N_L}{N_t}\,i(t_L)\;-\;\frac{N_R}{N_t}\,i(t_R),
+        $$
+        where \(i(\cdot)\) is impurity (Gini or entropy), \(N_t\) is samples at \(t\), and \(N_L,N_R\) are samples in the children.
+
+        #### 3) Mean Decrease in Impurity (MDI) — the default `.feature_importances_`
+        For feature \(j\), sum the impurity decreases at every split that used \(j\), weight by the node sample fraction, and average over all trees:
+        $$
+        \text{MDI}_j \;=\; 
+        \frac{1}{T}\sum_{\text{trees}} \;\sum_{\substack{t\ \text{uses}\ j}} 
+        \frac{N_t}{N_{\text{root}}}\; \Delta i(s,t).
+        $$
+        These importances are then normalized so that 
+        $$
+        \sum_j \text{MDI}_j = 1
+        $$
+
+        **Interpretation:** larger MDI ⇒ feature tends to make purer splits across the forest.  
+        **Caveat:** MDI can be biased toward features with many potential split points or high cardinality.
+
+        ---
+
+        #### 4) Permutation Importance (model-agnostic, optional)
+        Randomly permute a feature to break its relation with the target and measure the drop in a validation metric \(m(\cdot)\):
+        $$
+        I^{\text{perm}}_j \;=\; \frac{1}{B}\sum_{b=1}^{B}
+        \Big[m(X,y) \;-\; m(X_{\pi_j^{(b)}}, y)\Big],
+        $$
+        where 
+        $$
+        X_{\pi_j^{(b)}}
+        $$
+        is \(X\) with column \(j\) permuted in the \(b\)-th shuffle.
+        Larger drop ⇒ more important feature.
+
+        **MDI vs Permutation:**  
+        - MDI is fast (from training) but can be biased.  
+        - Permutation uses a holdout/OOB metric and is often more faithful but slower.
+        """)
         rf_classifier = RandomForestClassifier(random_state=42)
         rf_classifier.fit(X_scaled_without, true_labels)
         rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns)
@@ -1948,7 +2413,56 @@ if uploaded_file:
         st.dataframe(rf_df)
 
         # Univariate ANOVAs and Eta Squared
-        st.write("#### Univariate ANOVA with Eta Squared")
+        st.write("### 🔹 Univariate ANOVA with Eta Squared")
+        
+
+        with st.expander("How to read this (with formulas)"):
+            st.markdown(r"""
+        **What:** For each feature \(X\), one-way ANOVA tests whether the **group means differ** across IWGDF grades.
+
+        **Model (one-way ANOVA):**
+        $$
+        x_{gi} \;=\; \mu \;+\; \alpha_g \;+\; \varepsilon_{gi},
+        \quad \varepsilon_{gi}\sim \mathcal{N}(0,\sigma^2)
+        $$
+        where \(g\) indexes the IWGDF group and \(i\) samples within a group.
+
+        **Sum of squares:**
+        - Between (effect): 
+        $$
+        SS_\text{effect}
+        $$
+        - Within (error): 
+        $$
+        SS_\text{error}
+        $$
+        - Total: 
+        $$
+        SS_\text{total} = SS_\text{effect} + SS_\text{error}
+        $$
+
+        **F statistic:**
+        $$
+        F \;=\; \frac{SS_\text{effect}/df_\text{effect}}{SS_\text{error}/df_\text{error}}
+        $$
+
+        **Effect size — Eta squared (variance explained):**
+        $$
+        \eta^2 \;=\; \frac{SS_\text{effect}}{SS_\text{total}}
+        $$
+
+        **Partial Eta squared** (for multi-factor designs; equals \(\eta^2\) in one-way):
+        $$
+        \eta_p^2 \;=\; \frac{SS_\text{effect}}{SS_\text{effect} + SS_\text{error}}
+        $$
+
+        **Interpretation guide (Cohen, rough):**
+        - small \(\approx 0.01\) • medium \(\approx 0.06\) • large \(\approx 0.14\)
+
+        **p-value:** If \(p<0.05\), the feature’s mean differs across IWGDF groups.  
+        **Eta²:** Proportion of variance in the feature attributable to group differences.
+        """)
+    
         eta_squared = {}
         for col in full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns:
             groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
@@ -1962,14 +2476,21 @@ if uploaded_file:
         st.dataframe(eta_squared_df)
 
         # Display feature importance from clustering
-        st.write("### Feature Importance (With IWGDF Grade)")
+        st.write("### 🔹Feature Importance (With IWGDF Grade)")
+
         for algo_name, importance in feature_importance_dict_with.items():
             st.write(f"#### {algo_name}")
             top_features = importance.sort_values(ascending=False).head(5)
             top_features_df = pd.DataFrame({'Parameter': top_features.index, 'Importance': top_features.values})
             st.dataframe(top_features_df)
 
-        st.write("### Feature Importance (Without IWGDF Grade)")
+        st.write("### 🔹Feature Importance (Without IWGDF Grade)")
+        
+        st.markdown("""
+        We also compute feature importance **excluding the IWGDF grade** to assess which biomechanical or clinical parameters alone drive clustering.  
+        - Comparing the importance with and without IWGDF shows how much the clinical label influences cluster separation.
+        """)
+            
         for algo_name, importance in feature_importance_dict_without.items():
             st.write(f"#### {algo_name}")
             top_features = importance.sort_values(ascending=False).head(5)
@@ -1981,7 +2502,6 @@ if uploaded_file:
             if algo_name.startswith("Agglomerative (ward)") and (X_scaled_with.shape[1] < 2 or X_scaled_without.shape[1] < 2):
                 continue
             st.write(f"#### Statistics for {algo_name}")
-            
             st.write("**With IWGDF Grade**")
             st.write("Mean Values per Cluster")
             mean_key = f"With Grade_{algo_name}_mean"
@@ -2004,35 +2524,15 @@ if uploaded_file:
             if mean_key in cluster_stats_dict:
                 st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
 
-        # Interpretation
-        st.markdown("""
-        ### Interpretation:
-        - **Outlier Detection**:
-            - Outliers are detected using Isolation Forest with a contamination rate of 0.1 (10% of data points assumed as outliers).
-            - Outlier patient file numbers are listed to identify potentially anomalous cases for further clinical review.
-        - **Clustering Visualization**:
-            - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star). Each point is annotated with the patient file number.
-            - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on biomechanical, vascular, and thermal parameters. Same color/symbol scheme for comparison, with patient file numbers annotated.
-        - **Clustering Metrics**:
-            - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
-            - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
-            - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
-            - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
-            - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
-        - **Confusion Matrices**: Show alignment between IWGDF grades (0, 1, 2, 3) and cluster labels. High diagonal values indicate good correspondence; off-diagonal values suggest misalignments, potentially indicating limitations in IWGDF grading.
-        - **IWGDF Group Homogeneity**:
-            - **Within-group Inertia**: Measures the compactness of IWGDF groups by summing the squared distances of points to their grade centroids. Moderate to high values suggest variability within grades.
-            - **MANOVA (IWGDF Grade as Factor)**: A p-value of 0 (or <0.001) indicates significant differences between IWGDF groups, suggesting they are well-separated in the multivariate parameter space. Verify data quality to ensure reliability.
-            - **Silhouette Score for IWGDF Labels**: A low score indicates high overlap between groups, suggesting poor separation. A higher score (>0.5) suggests well-defined groups.
-        - **Parameter Importance**:
-            - **Logistic Regression with LASSO Regularization**: Non-zero coefficients highlight key discriminators for IWGDF grades.
-            - **Random Forest Classifier**: Higher importance scores indicate greater contribution to classification.
-            - **Univariate ANOVAs with R² (Eta Squared)**: Higher eta squared values indicate parameters explaining more variance between grades.
-        - **Key Insights**:
-            - Outlier detection helps identify patients with unusual parameter profiles, which may warrant further investigation.
-            - Patient file numbers on plots enable tracking of individual cases within clusters.
-            - Low ARI/NMI in the without-grade case suggests natural groupings may differ from IWGDF grades, potentially offering alternative stratifications.
-            - Parameters with high LASSO coefficients, Random Forest importance, or eta squared values guide clinical focus.
+        with st.expander("Explanation"):
+            st.markdown("""
+        After clustering patients based on their biomechanical and clinical features, we often want to summarize the **characteristics of each cluster**.  
+        - **Mean values per cluster** show the average level of each parameter in that cluster.  
+        - **Median values per cluster** provide a robust measure of central tendency, less sensitive to outliers.  
+        - By comparing statistics **with and without the IWGDF grade**, we can understand:  
+        1. How much the clinical label (IWGDF grade) affects cluster composition.  
+        2. Which features naturally differentiate patients even without the label.
+        - These tables help interpret the clusters and identify key patterns in the dataset.
         """)
 
     # ================================
@@ -2041,7 +2541,6 @@ if uploaded_file:
     elif analysis_type == "Clustering (All Parameters)":
         st.header("Clustering with All Parameters")
         important_params = {
-            6: "Date of Birth",
             16: "Grade IWGDF",
             17: "Height (m)", 18: "Weight (kg)", 19: "BMI",
             24: "AOMI",
@@ -2179,6 +2678,7 @@ if uploaded_file:
         full_df_cleaned_with = full_df_cleaned_with.loc[common_indices]
         full_df_cleaned_without = full_df_cleaned_without.loc[common_indices]
 
+
         # Perform PCA for visualization
         pca_with = PCA(n_components=2)
         coords_with = pca_with.fit_transform(X_scaled_with)
@@ -2187,6 +2687,27 @@ if uploaded_file:
         coords_without = pca_without.fit_transform(X_scaled_without)
         st.write(f"Explained variance ratio (Without Grade): {pca_without.explained_variance_ratio_}")
 
+        with st.expander("Explained Variance Ratio"):
+            st.markdown("""
+        **Explanation:**  
+        When performing dimensionality reduction (e.g., PCA) on your dataset, the **explained variance ratio** tells us **how much of the total data variability is captured by each principal component**.
+
+        - **With Grade:** `[0.23492272, 0.14217019]`  
+        - The first principal component explains ~23.5% of the variance.  
+        - The second principal component explains ~14.2% of the variance.  
+        - Together, these two components capture ~37.7% of the total variability in the dataset including IWGDF grade.
+
+        - **Without Grade:** `[0.22247782, 0.16232761]`  
+        - The first component explains ~22.2% of variance.  
+        - The second component explains ~16.2% of variance.  
+        - Together, these two components capture ~38.4% of total variability **without including the clinical grade**.
+
+        **Interpretation:**  
+        - These values indicate how well the first few components summarize the dataset.  
+        - Slight differences between with and without grade show how much the clinical label influences the main directions of variance.  
+        - Higher explained variance means the components better capture the underlying structure of the data, which is useful for clustering or visualization.
+        """)
+            
         # Streamlit header and parameter display
         st.markdown("""
         The parameters used for clustering are:
@@ -2206,12 +2727,73 @@ if uploaded_file:
         """)
         
         st.markdown("---")
-        st.caption("Agglomerative (ward): Hierarchically merges clusters by minimizing variance within clusters.")
-        st.caption("Agglomerative (average): Hierarchically merges clusters using average distance between points.")
-        st.caption("KMeans: Partitions data into k clusters by minimizing distance to cluster centroids.")
-        st.caption("Gaussian Mixture Model: Clusters data using probabilistic Gaussian distributions.")
-        st.markdown("---")
+        st.markdown("Agglomerative (ward): Hierarchically merges clusters by minimizing variance within clusters.")
+        with st.expander("Agglomerative (Ward)"):st.markdown("""
+        - Builds clusters step by step (hierarchical).  
+        - At each step, merges the two clusters that **minimize the increase of variance** inside clusters.  
+
+        **Formula (Ward’s criterion):**  
+
+        $$
+        \\Delta (C_i, C_j) = \\frac{n_i n_j}{n_i + n_j} \\, ||\\bar{x}_i - \\bar{x}_j||^2
+        $$  
+
+        Where:  
+        - $n_i, n_j$: sizes of clusters $C_i$ and $C_j$  
+        - $\\bar{x}_i, \\bar{x}_j$: centroids of clusters  
+        """)
         
+        st.markdown("Agglomerative (average): Hierarchically merges clusters using average distance between points.")
+        with st.expander("Agglomerative (Average)"):st.markdown("""
+        - Hierarchical method too.  
+        - At each step, merges the clusters with the **smallest average distance** between their points.  
+
+        **Formula (Average linkage):**  
+
+        $$
+        d(C_i, C_j) = \\frac{1}{n_i n_j} \\sum_{x \\in C_i} \\sum_{y \\in C_j} d(x,y)
+        $$  
+
+        Where:  
+        - $d(x,y)$ is the distance between points $x$ and $y$.  
+        """)
+
+        st.markdown("KMeans: Partitions data into k clusters by minimizing distance to cluster centroids.")
+        
+        with st.expander("KMeans"):st.markdown("""
+        - Splits the data into **k clusters**.  
+        - Each point is assigned to the nearest cluster center (centroid).  
+        - The algorithm updates centroids to minimize the total distance.  
+
+        **Objective function:**  
+
+        $$
+        J = \\sum_{i=1}^k \\sum_{x \\in C_i} ||x - \\mu_i||^2
+        $$  
+
+        Where:  
+        - $\\mu_i$ = centroid of cluster $C_i$.  
+        """)
+        
+        st.markdown("Gaussian Mixture Model: Clusters data using probabilistic Gaussian distributions.")
+        with st.expander("Gaussian Mixture Model (GMM)"):st.markdown("""
+        - Assumes data comes from a mix of several Gaussian distributions.  
+        - Each point has a **probability** of belonging to each cluster.  
+
+        **Probability density:**  
+
+        $$
+        p(x) = \\sum_{i=1}^k \\pi_i \\, \\mathcal{N}(x \\,|\\, \\mu_i, \\Sigma_i)
+        $$  
+
+        Where:  
+        - $\\pi_i$ = weight (mixing coefficient)  
+        - $\\mu_i$ = mean of Gaussian $i$  
+        - $\\Sigma_i$ = covariance of Gaussian $i$.  
+        """)
+
+        st.markdown("---")
+                
         # Corrected dictionary initialization
         metrics_with = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
         metrics_without = {"Algorithm": [], "Silhouette": [], "Calinski-Harabasz": [], "Davies-Bouldin": [], "ARI": [], "NMI": []}
@@ -2325,6 +2907,10 @@ if uploaded_file:
 
         # Run clustering for both cases
         st.subheader("Clustering Comparison: With and Without IWGDF Grade")
+        st.markdown("""
+            - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star). Each point is annotated with the patient file number.
+            - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on biomechanical, vascular, and thermal parameters. Same color/symbol scheme for comparison, with patient file numbers annotated.
+        """)
         run_clustering(X_scaled_with, full_df_cleaned_with, true_labels, coords_with, "With Grade", axes, 0, feature_importance_dict_with)
         run_clustering(X_scaled_without, full_df_cleaned_without, true_labels, coords_without, "Without Grade", axes, 1, feature_importance_dict_without)
 
@@ -2335,16 +2921,126 @@ if uploaded_file:
         plt.close(fig)
 
         # Display metrics
-        st.write("### Clustering Metrics (With IWGDF Grade)")
+        st.markdown("---")
+        st.markdown("## 📊 Clustering Evaluation Metrics")
+        st.markdown("""
+        - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
+        - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
+        - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
+        - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
+        - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
+        """)
+        
+        with st.expander("Silhouette Score"):st.markdown("""
+        - Measures how well each point fits in its cluster compared to other clusters.  
+        - Ranges from **-1 to 1** (higher is better).  
+
+        **Formula:**  
+
+        $$
+        s(i) = \\frac{b(i) - a(i)}{\\max(a(i), b(i))}
+        $$  
+
+        Where:  
+        - $a(i)$ = average distance of point $i$ to others in the same cluster  
+        - $b(i)$ = average distance of point $i$ to the nearest other cluster  
+        """)
+
+        with st.expander("Calinski–Harabasz Index (CH)"):st.markdown("""
+        - Ratio of **between-cluster variance** to **within-cluster variance**.  
+        - Higher values mean clusters are dense and well separated.  
+
+        **Formula:**  
+
+        $$
+        CH = \\frac{Tr(B_k)}{Tr(W_k)} \\times \\frac{n-k}{k-1}
+        $$  
+
+        Where:  
+        - $Tr(B_k)$ = between-cluster dispersion  
+        - $Tr(W_k)$ = within-cluster dispersion  
+        - $n$ = number of points  
+        - $k$ = number of clusters  
+        """)
+
+        with st.expander("Davies–Bouldin Index (DB)"):st.markdown("""
+        - Measures average similarity between clusters (lower is better).  
+        - A similarity is the ratio of **within-cluster scatter** to **between-cluster separation**.  
+
+        **Formula:**  
+
+        $$
+        DB = \\frac{1}{k} \\sum_{i=1}^k \\max_{j \\neq i} \\frac{\\sigma_i + \\sigma_j}{d(c_i, c_j)}
+        $$  
+
+        Where:  
+        - $\\sigma_i$ = average distance of points in cluster $i$ to centroid $c_i$  
+        - $d(c_i, c_j)$ = distance between centroids  
+        """)
+
+        with st.expander("Adjusted Rand Index (ARI)"):st.markdown("""
+        - Compares how similar clustering results are to a **reference (ground truth)**.  
+        - Adjusted for chance, ranges from **-1 to 1** (higher = better agreement).  
+
+        **Formula:**  
+
+        $$
+        ARI = \\frac{RI - E[RI]}{\\max(RI) - E[RI]}
+        $$  
+
+        Where:  
+        - $RI$ = Rand Index (agreement between pairs of points)  
+        - $E[RI]$ = expected Rand Index under random labeling  
+        """)
+
+        with st.expander("Normalized Mutual Information (NMI)"):st.markdown("""
+        - Measures how much information is shared between clustering results and ground truth.  
+        - Normalized to range between **0 and 1** (higher = better).  
+
+        **Formula:**  
+
+        $$
+        NMI(U,V) = \\frac{2 \\, I(U;V)}{H(U) + H(V)}
+        $$  
+
+        Where:  
+        - $I(U;V)$ = mutual information between cluster labels $U$ and $V$  
+        - $H(U), H(V)$ = entropy of clusterings  
+        """)
+
+        st.markdown("---")
+        
         metrics_df_with = pd.DataFrame(metrics_with).sort_values(by="Silhouette", ascending=False)
         st.dataframe(metrics_df_with.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
 
-        st.write("### Clustering Metrics (Without IWGDF Grade)")
+        st.write("## Clustering Metrics (Without IWGDF Grade)")
         metrics_df_without = pd.DataFrame(metrics_without).sort_values(by="Silhouette", ascending=False)
         st.dataframe(metrics_df_without.style.format("{:.3f}", subset=["Silhouette", "Calinski-Harabasz", "Davies-Bouldin", "ARI", "NMI"]))
 
         # Display confusion matrices
-        st.write("### Confusion Matrices (All IWGDF Grades vs Clusters)")
+        st.write("## 📊 Confusion Matrix")
+
+        with st.expander("What is a Confusion Matrix?"):st.markdown("""
+        - A **table** used to evaluate classification performance.  
+        - Shows how many predictions were **correct** and where the model made **errors**.  
+        - Rows = **actual labels**, Columns = **predicted labels**.  
+
+        For a **binary classification** (2 classes):  
+
+        |                | Predicted Positive | Predicted Negative |
+        |----------------|-------------------|-------------------|
+        | **Actual Positive** | True Positive (TP) | False Negative (FN) |
+        | **Actual Negative** | False Positive (FP) | True Negative (TN) |
+
+
+        ---
+        ### 🔹 Multiclass Case
+        - The matrix extends to a **k × k table** (k = number of classes).  
+        - Each diagonal cell = correctly predicted class.  
+        - Off-diagonal cells = misclassifications.  
+        """)
+
+        
         n_matrices = len(confusion_matrices)
         n_rows = (n_matrices + 1) // 2
         fig, axes = plt.subplots(n_rows, 2, figsize=(12, 5 * n_rows))
@@ -2366,7 +3062,57 @@ if uploaded_file:
         plt.close(fig)
 
         # Outlier Analysis
-        st.write("### Outlier Analysis")
+        st.write("## 🚨 Outlier Analysis")
+        with st.expander("What is Outlier Analysis?"):st.markdown("""
+        - **Outliers** are data points that are very different from the rest of the dataset.  
+        - They may come from **measurement errors**, **rare events**, or **true anomalies**.  
+        - Detecting outliers is important because they can **bias statistical tests, clustering, or machine learning models**.  
+
+        ---
+        ### 🔹 Method for Detecting Outliers:
+        #### 🌲 Outlier Analysis with Isolation Forest
+        - An **anomaly detection method** based on the idea that:  
+        - Outliers are **few** and **different**.  
+        - They can be isolated (separated) faster than normal points.  
+        - Works by building many **random decision trees**.  
+        - The **path length** (number of splits) needed to isolate a point tells if it is an outlier.  
+
+        ---
+        ### 🔹 How It Works
+        1. Randomly select a feature and a split value.  
+        2. Build many trees (ensemble).  
+        3. Compute the **average path length** $h(x)$ for each point.  
+        - Outliers → shorter paths (easy to isolate).  
+        - Normal points → longer paths (harder to isolate).  
+
+        ---
+        ### 🔹 Anomaly Score
+        The anomaly score of a data point $x$ is:  
+
+        $$
+        s(x, n) = 2^{-\\frac{E(h(x))}{c(n)}}
+        $$  
+
+        Where:  
+        - $E(h(x))$ = average path length of $x$ over all trees  
+        - $c(n)$ = average path length in a random binary search tree with $n$ points  
+
+        **Interpretation:**  
+        - $s(x) \\to 1$: point is very likely an outlier  
+        - $s(x) < 0.5$: point is likely normal  
+
+        ---
+        ### 🔹 In my Code
+        - `contamination=0.1` → assumes 10% of data are outliers  
+        - To decide which points are outliers, we need a threshold.
+        - The parameter contamination tells the model what proportion of the dataset is expected to be outliers.
+        ---
+
+        ### 🔹 Why Outlier Analysis Matters
+        - Helps improve **data quality**.  
+        - Avoids misleading **statistical conclusions**.  
+        - Useful in detecting **fraud, anomalies, or rare medical conditions**.  
+        """)
         iso_forest = IsolationForest(contamination=0.1, random_state=42)
         outlier_labels = iso_forest.fit_predict(X_scaled_without)
         outliers = full_df_cleaned_without[outlier_labels == -1]
@@ -2379,13 +3125,59 @@ if uploaded_file:
 
         inertia = calculate_inertia(X_scaled_without, true_labels)
         st.write(f"Within-group inertia for IWGDF groups: {inertia:.3f}")
-        st.write("**Interpretation**: Within-group inertia measures the compactness of IWGDF groups. Lower values indicate tighter clusters.")
+        st.markdown("""
+        - **Within-group inertia** quantifies how tightly the data points in each group are clustered around their group’s center (centroid).  
+        - A **low value** → points are compact, groups are homogeneous.  
+        - A **high value** → points are spread out, groups are heterogeneous.  
 
+        **Interpretation:**  
+        - **Within-group inertia** measures the total variability **inside each IWGDF risk grade group**.  
+        - A lower inertia indicates that patients within the same IWGDF grade are **more similar** in terms of the measured biomechanical and clinical features.  
+        - Conversely, higher inertia suggests greater **heterogeneity** within the group.  
+        - Here, a value of 981.748 quantifies the **spread of features** among patients within the IWGDF groups, providing insight into how distinct or compact each risk grade cluster is.  
+        - This metric can help assess **whether IWGDF grades naturally separate patients** or if additional factors might better explain variability within grades.
+        """)
+        
         grade_counts = true_labels.value_counts().sort_index()
         st.write("#### Sample Sizes per IWGDF Grade")
         st.write(grade_counts)
         st.write("**Note**: MANOVA requires sufficient samples per group (typically > number of features).")
 
+
+        with st.expander("What is MANOVA?"):st.markdown("""
+        - **MANOVA (Multivariate Analysis of Variance)** tests whether the means of **multiple dependent variables** differ across groups defined by a factor (here, IWGDF grade).  
+        - Extends ANOVA to handle multiple outcomes simultaneously.
+        
+        ### 🔹 Interpretation
+        - If **p-value < 0.05** (or 0), the multivariate group differences are statistically significant.  
+        - Here, a very small p-value suggests that **IWGDF grades are well-separated** in the multivariate space of biomechanical parameters.   
+
+        ### 🔹 Key Test Statistics
+        - **Pillai’s Trace**, **Wilks’ Lambda**, **Hotelling-Lawley Trace**, **Roy’s Largest Root**  
+        - All measure the degree of separation between group centroids in multivariate space.  
+
+        ### 🔹 Formula
+        MANOVA is based on partitioning total variation:
+
+        $$
+        T = W + B
+        $$
+
+        Where:  
+        - $T$ = total sum of squares and cross-products (SSCP) matrix  
+        - $W$ = within-group SSCP matrix  
+        - $B$ = between-group SSCP matrix
+
+        **Wilks’ Lambda** (one common test statistic):
+
+        $$
+        \\Lambda = \\frac{|W|}{|T|} = \\frac{|W|}{|W + B|}
+        $$
+
+        - Smaller $\\Lambda$ → stronger evidence that group means differ.  
+        - Pillai’s Trace, Hotelling-Lawley, Roy’s Largest Root are alternative ways to summarize $W$ and $B$.
+        """)
+        
         # MANOVA with IWGDF Grade as Factor
         st.write("#### MANOVA with IWGDF Grade as Factor")
         manova_data = full_df_cleaned_without.drop(columns=['Patient_File_Number']).copy()
@@ -2426,14 +3218,95 @@ if uploaded_file:
                 st.write("Data types:", manova_data.dtypes)
                 st.write("Sample sizes per group:", n_samples_per_group)
 
+        with st.expander("⚠️ MANOVA Warning Explanation"):st.markdown("""
+        **Context:**  
+        - MANOVA tests whether **multivariate means** of several groups (here, IWGDF grades) are significantly different across multiple features.  
+        - It relies on estimating **covariance matrices** within each group.
+
+        **The Warning:**  
+
+        **Why it happens:**  
+        1. The **smallest group** (here, a grade with only 1 patient) has fewer observations than the number of features (85).  
+        2. MANOVA requires that the number of samples per group **exceeds the number of features** to compute reliable covariance matrices.  
+        3. If the group size is too small, the covariance matrix cannot be properly estimated → the test statistic becomes **unreliable or undefined**.  
+
+        **Implications:**  
+        - Results from this MANOVA may **not be trustworthy** for comparing IWGDF grades.  
+        - This is especially problematic in high-dimensional datasets (many features) with **unbalanced groups**.  
+
+        **Possible Solutions:**  
+        1. **Reduce the number of features** (feature selection, PCA, or LASSO) before MANOVA.  
+        2. **Combine small groups** if clinically appropriate.  
+        3. Use alternative multivariate tests that can handle **high-dimensional small-sample data**, e.g., **permutation MANOVA** (PERMANOVA) or regularized MANOVA.
+        """)
+
+        st.write(f"## Silhouette Score for IWGDF-Imposed Clusters")
         silhouette_iwgdf = silhouette_score(X_scaled_without, true_labels)
         st.write(f"Silhouette Score for IWGDF labels: {silhouette_iwgdf:.3f}")
-        st.write("**Interpretation**: Higher scores (>0.5) indicate well-separated groups.")
+        st.markdown("""
+        **Interpretation:**  
+        - A low Silhouette Score (≈ 0) indicates **high overlap** between IWGDF groups → poor separation.  
+        - A higher score (> 0.5) indicates **well-defined, distinct groups**.  
+        """)
 
         # Parameter Importance Analysis
-        st.write("### Parameter Importance Analysis")
-        
-        st.write("#### Logistic Regression with LASSO Regularization")
+        st.write("## 📌 Parameter Importance Analysis")
+        st.markdown("""
+        Feature importance in clustering analysis indicates **how much each parameter contributes to the separation of clusters**.  
+        - In unsupervised clustering, the algorithm identifies patterns in the data without using labels.  
+        - By analyzing the variance or contribution of each feature to the cluster assignments, we can rank parameters that most influence the grouping of patients.  
+        - Here, we show the **top 5 most important parameters** for each clustering algorithm.
+        """)
+                
+
+        # LASSO Regression for automatic variable selection
+        st.write("### 🔹 Logistic Regression with LASSO Regularization")
+
+        with st.expander("What this method does (intuitive + formulas)"):
+            st.markdown(r"""
+        **Goal.** Predict the class (here, *IWGDF grade*) from many features while **automatically selecting** the most informative ones.
+
+        **Model.** Logistic regression models the probability of the positive class as
+
+        $$
+        p_i = \Pr(y_i = 1 \mid \mathbf{x}_i) 
+        = \sigma(\mathbf{x}_i^\top \boldsymbol\beta) 
+        = \frac{1}{1 + e^{-\mathbf{x}_i^\top \boldsymbol\beta}}
+        $$
+
+        where:
+        - $\sigma(\cdot)$ = logistic (sigmoid) function  
+        - $\mathbf{x}_i$ = feature vector for sample $i$  
+        - $\boldsymbol\beta$ = coefficients to estimate  
+
+        ---
+
+        **LASSO-penalized loss function (negative log-likelihood + L1 penalty):**
+
+        $$
+        \mathcal{L}(\boldsymbol\beta) =
+        -\frac{1}{n}\sum_{i=1}^n \Big[
+        y_i \log(p_i) + (1-y_i)\log(1-p_i)
+        \Big]
+        \;+\; \lambda \sum_{j=1}^p |\beta_j|
+        $$
+
+        - First term = logistic regression loss  
+        - Second term = **L1 penalty** → encourages sparsity (coefficients driven to exactly zero)  
+
+        ---
+
+        **scikit-learn parameterization:**
+
+        $$
+        C = \frac{1}{\lambda}
+        $$
+
+        - Smaller $C$ ⇒ stronger penalty ⇒ fewer features selected  
+        - Larger $C$ ⇒ weaker penalty ⇒ more features retained  
+
+        **Why standardize features?** L1 compares coefficient magnitudes across features; scaling puts features on the same footing so the penalty is fair.
+        """)     
         try:
             lasso = LogisticRegression(penalty='l1', solver='liblinear', random_state=42)
             lasso.fit(X_scaled_without, true_labels)
@@ -2443,14 +3316,126 @@ if uploaded_file:
         except Exception as e:
             st.warning(f"LASSO regression failed: {str(e)}.")
 
-        st.write("#### Random Forest Classifier Feature Importance")
+
+        # Random Forest Classifier for feature importance
+        st.write("### 🔹Random Forest Classifier Feature Importance")
+        
+        with st.expander("What does 'feature importance' mean here? (with formulas)"):
+            st.markdown(r"""
+        Random Forests average many decision trees. Each split reduces **impurity** (mixing of classes).  
+        A feature is considered **important** if it frequently produces **large impurity decreases** across the forest.
+
+        ---
+
+        #### 1) Node Impurity (classification)
+        Most implementations use **Gini impurity**:
+        $$
+        G(t)=1-\sum_{k=1}^{K} p_{k}(t)^2,
+        $$
+        or sometimes **entropy**:
+        $$
+        H(t)=-\sum_{k=1}^{K} p_{k}(t)\,\log p_{k}(t),
+        $$
+        where \(p_k(t)\) is the proportion of class \(k\) among samples reaching node \(t\).
+
+        #### 2) Impurity Decrease from a Split
+        For a node \(t\) split by feature \(j\) into left/right children \(t_L,t_R\):
+        $$
+        \Delta i(s,t) \;=\; i(t)\;-\;\frac{N_L}{N_t}\,i(t_L)\;-\;\frac{N_R}{N_t}\,i(t_R),
+        $$
+        where \(i(\cdot)\) is impurity (Gini or entropy), \(N_t\) is samples at \(t\), and \(N_L,N_R\) are samples in the children.
+
+        #### 3) Mean Decrease in Impurity (MDI) — the default `.feature_importances_`
+        For feature \(j\), sum the impurity decreases at every split that used \(j\), weight by the node sample fraction, and average over all trees:
+        $$
+        \text{MDI}_j \;=\; 
+        \frac{1}{T}\sum_{\text{trees}} \;\sum_{\substack{t\ \text{uses}\ j}} 
+        \frac{N_t}{N_{\text{root}}}\; \Delta i(s,t).
+        $$
+        These importances are then normalized so that 
+        $$
+        \sum_j \text{MDI}_j = 1
+        $$
+
+        **Interpretation:** larger MDI ⇒ feature tends to make purer splits across the forest.  
+        **Caveat:** MDI can be biased toward features with many potential split points or high cardinality.
+
+        ---
+
+        #### 4) Permutation Importance (model-agnostic, optional)
+        Randomly permute a feature to break its relation with the target and measure the drop in a validation metric \(m(\cdot)\):
+        $$
+        I^{\text{perm}}_j \;=\; \frac{1}{B}\sum_{b=1}^{B}
+        \Big[m(X,y) \;-\; m(X_{\pi_j^{(b)}}, y)\Big],
+        $$
+        where 
+        $$
+        X_{\pi_j^{(b)}}
+        $$
+        is \(X\) with column \(j\) permuted in the \(b\)-th shuffle.
+        Larger drop ⇒ more important feature.
+
+        **MDI vs Permutation:**  
+        - MDI is fast (from training) but can be biased.  
+        - Permutation uses a holdout/OOB metric and is often more faithful but slower.
+        """)
         rf_classifier = RandomForestClassifier(random_state=42)
         rf_classifier.fit(X_scaled_without, true_labels)
         rf_importance = pd.Series(rf_classifier.feature_importances_, index=full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns)
         rf_importance = rf_importance.sort_values(ascending=False).head(5)
         st.dataframe(pd.DataFrame({'Parameter': rf_importance.index, 'Importance': rf_importance.values}))
 
-        st.write("#### Univariate ANOVA with Eta Squared")
+
+        # Univariate ANOVAs and Eta Squared
+        st.write("### 🔹 Univariate ANOVA with Eta Squared")
+        
+
+        with st.expander("How to read this (with formulas)"):
+            st.markdown(r"""
+        **What:** For each feature \(X\), one-way ANOVA tests whether the **group means differ** across IWGDF grades.
+
+        **Model (one-way ANOVA):**
+        $$
+        x_{gi} \;=\; \mu \;+\; \alpha_g \;+\; \varepsilon_{gi},
+        \quad \varepsilon_{gi}\sim \mathcal{N}(0,\sigma^2)
+        $$
+        where \(g\) indexes the IWGDF group and \(i\) samples within a group.
+
+        **Sum of squares:**
+        - Between (effect): 
+        $$
+        SS_\text{effect}
+        $$
+        - Within (error): 
+        $$
+        SS_\text{error}
+        $$
+        - Total: 
+        $$
+        SS_\text{total} = SS_\text{effect} + SS_\text{error}
+        $$
+
+        **F statistic:**
+        $$
+        F \;=\; \frac{SS_\text{effect}/df_\text{effect}}{SS_\text{error}/df_\text{error}}
+        $$
+
+        **Effect size — Eta squared (variance explained):**
+        $$
+        \eta^2 \;=\; \frac{SS_\text{effect}}{SS_\text{total}}
+        $$
+
+        **Partial Eta squared** (for multi-factor designs; equals \(\eta^2\) in one-way):
+        $$
+        \eta_p^2 \;=\; \frac{SS_\text{effect}}{SS_\text{effect} + SS_\text{error}}
+        $$
+
+        **Interpretation guide (Cohen, rough):**
+        - small \(\approx 0.01\) • medium \(\approx 0.06\) • large \(\approx 0.14\)
+
+        **p-value:** If \(p<0.05\), the feature’s mean differs across IWGDF groups.  
+        **Eta²:** Proportion of variance in the feature attributable to group differences.
+        """)
         eta_squared = {}
         for col in full_df_cleaned_without.drop(columns=['Patient_File_Number']).columns:
             groups = [full_df_cleaned_without[col][true_labels == grade].dropna() for grade in sorted(true_labels.unique())]
@@ -2470,6 +3455,10 @@ if uploaded_file:
             st.dataframe(pd.DataFrame({'Parameter': top_features.index, 'Importance': top_features.values}))
 
         st.write("### Feature Importance (Without IWGDF Grade)")
+        st.markdown("""
+        We also compute feature importance **excluding the IWGDF grade** to assess which biomechanical or clinical parameters alone drive clustering.  
+        - Comparing the importance with and without IWGDF shows how much the clinical label influences cluster separation.
+        """)
         for algo_name, importance in feature_importance_dict_without.items():
             st.write(f"#### {algo_name}")
             top_features = importance.sort_values(ascending=False).head(5)
@@ -2504,35 +3493,15 @@ if uploaded_file:
                 st.dataframe(cluster_stats_dict[median_key].style.format("{:.2f}"))
 
         # Interpretation
-        st.markdown("""
-        ### Interpretation:
-        - **Outlier Detection**:
-            - Outliers are detected using Isolation Forest with a contamination rate of 0.1 (10% of data points assumed as outliers).
-            - Outlier patient file numbers are listed to identify potentially anomalous cases for further clinical review.
-        - **Clustering Visualization**:
-            - **Left Column (With Grade)**: Clusters include IWGDF grade as a feature. Points are colored by cluster labels (0: green, 1: blue, 2: orange, 3: red) with symbols for IWGDF grades (0: circle, 1: square, 2: triangle, 3: star). Each point is annotated with the patient file number, styled with a larger, bold font and a semi-transparent white background for improved legibility.
-            - **Right Column (Without Grade)**: Clusters exclude IWGDF grade, relying on all other parameters. Same color/symbol scheme for comparison, with patient file numbers annotated similarly.
-            - **Legend**: The legend restores the original marker shapes, with IWGDF grades shown as circles, squares, triangles, and stars, and clusters shown as circles with their respective colors.
-        - **Clustering Metrics**:
-            - **Silhouette Score**: Values >0.5 indicate well-separated clusters; values near 0 or negative suggest overlap.
-            - **Calinski-Harabasz**: Higher values indicate better-defined clusters with high between-cluster variance.
-            - **Davies-Bouldin**: Lower values suggest compact, well-separated clusters; higher values indicate overlap.
-            - **ARI**: Values near 1 show strong agreement with IWGDF grades; low values suggest alternative groupings.
-            - **NMI**: Values near 1 indicate high shared information with IWGDF grades; low values suggest distinct clusters.
-        - **Confusion Matrices**: Show alignment between IWGDF grades (0, 1, 2, 3) and cluster labels. High diagonal values indicate good correspondence; off-diagonal values suggest misalignments.
-        - **IWGDF Group Homogeneity**:
-            - **Within-group Inertia**: Measures the compactness of IWGDF groups. Lower values indicate tighter clusters.
-            - **MANOVA**: A p-value < 0.05 indicates significant differences between IWGDF groups.
-            - **Silhouette Score for IWGDF Labels**: Higher scores (>0.5) indicate well-separated groups.
-        - **Parameter Importance**:
-            - **Logistic Regression with LASSO Regularization**: Non-zero coefficients highlight key discriminators for IWGDF grades.
-            - **Random Forest Classifier**: Higher importance scores indicate greater contribution to classification.
-            - **Univariate ANOVAs with Eta Squared**: Higher eta squared values indicate parameters explaining more variance between grades.
-        - **Key Insights**:
-            - Outlier detection helps identify patients with unusual parameter profiles.
-            - Patient file numbers on plots, with enhanced legibility, enable tracking of individual cases within clusters.
-            - Low ARI/NMI in the without-grade case suggests natural groupings may differ from IWGDF grades.
-            - Parameters with high LASSO coefficients, Random Forest importance, or eta squared values guide clinical focus.
+        with st.expander("Explanation"):
+            st.markdown("""
+        After clustering patients based on their biomechanical and clinical features, we often want to summarize the **characteristics of each cluster**.  
+        - **Mean values per cluster** show the average level of each parameter in that cluster.  
+        - **Median values per cluster** provide a robust measure of central tendency, less sensitive to outliers.  
+        - By comparing statistics **with and without the IWGDF grade**, we can understand:  
+        1. How much the clinical label (IWGDF grade) affects cluster composition.  
+        2. Which features naturally differentiate patients even without the label.
+        - These tables help interpret the clusters and identify key patterns in the dataset.
         """)
     # ================================
     # 📌 Correlation Between Key Parameters
@@ -2583,7 +3552,21 @@ if uploaded_file:
             corr_matrix = df_corr_numeric.corr()
 
             # Show highly correlated pairs
-            st.markdown("### 🔍 Highly Correlated Pairs")
+            with st.expander("🔍 Highly Correlated Pairs"):st.markdown("""
+            **Explanation:**  
+            Correlation analysis identifies **pairs of features that are strongly related**.  
+            - A high correlation (positive or negative) indicates that two features **vary together**, which may suggest redundancy.  
+            - Detecting highly correlated pairs is useful for:
+            1. **Feature selection** – you can remove redundant features to reduce dimensionality.
+            2. **Multicollinearity check** – highly correlated predictors can distort regression or machine learning models.
+            3. **Data understanding** – helps identify underlying relationships between biomechanical and clinical parameters.
+            """)
+            st.markdown("""
+            - The slider lets you set a correlation **threshold** (default 0.8).  
+            - All pairs with |correlation| ≥ threshold are listed.  
+            - You can **view the top correlated pairs in a table** and **download the list as an Excel file** for further analysis.
+            """)
+
             threshold = st.slider("Threshold", 0.5, 1.0, 0.8, 0.05)
             high_corr = []
             for i in range(len(corr_matrix.columns)):
@@ -2622,6 +3605,16 @@ if uploaded_file:
                 st.markdown("---")
                 st.subheader("📈 Correlation Visualizations")
 
+                st.markdown("""
+                This section allows you to **visually explore the relationship between two numerical features** in your dataset.  
+                - By plotting one variable on the X-axis and another on the Y-axis, you can quickly see if they have a **positive, negative, or no correlation**.  
+                - Scatter plots help identify:
+                1. **Linear relationships** – points align along a line.
+                2. **Non-linear relationships** – curved patterns.
+                3. **Outliers** – points far away from the general trend.
+                - Selecting different variables from the dropdowns allows **interactive exploration** of all numeric features, supporting hypothesis generation and data understanding.
+                """)
+
                 fig4, ax4 = plt.subplots() 
                 x_feature = st.selectbox("Choose X-axis variable:", df_corr_numeric.columns)
                 y_feature = st.selectbox("Choose Y-axis variable:", df_corr_numeric.columns, index=1)
@@ -2640,7 +3633,7 @@ if uploaded_file:
 
                 if x_feature != y_feature:
                     # Scatter Plot
-                    st.write("**Scatter Plot**")
+                    st.subheader("📊 Scatter Plot")
                     fig1, ax1 = plt.subplots()
                     ax1.scatter(df_corr_numeric[x_feature], df_corr_numeric[y_feature], alpha=0.6)
                     ax1.set_xlabel(x_feature)
@@ -2649,7 +3642,15 @@ if uploaded_file:
                     st.markdown(f"ℹ️ **Scatter Plot Explanation:** Each point represents one patient. The X and Y axes are the selected parameters. The plot shows their relationship and spread.")
 
                     # Line plot with regression
-                    st.write("**Line Plot with Regression Line**")
+                    st.subheader("📈 Line Plot with Regression Line")
+                    st.markdown(f"""
+                    - Shows the **linear relationship** between **{x_feature}** (X-axis) and **{y_feature}** (Y-axis).  
+                    - Includes a **regression line** representing the best-fit linear model.  
+                    - Shaded area around the line represents the **confidence interval**, indicating uncertainty of the fit.  
+                    - Helps assess both the **strength** (steepness) and **direction** (positive/negative) of correlation between the two variables.  
+                    - Can also reveal **outliers or unusual patterns** that may affect correlation analysis.
+                    """)
+
                     fig2 = sns.lmplot(data=df_corr_numeric, x=x_feature, y=y_feature, aspect=1.5)
                     st.pyplot(fig2)
                     st.markdown(f"ℹ️ **Regression Plot Explanation:** Shows linear trend and confidence interval between {x_feature} and {y_feature}. Helps assess correlation strength and direction.")
@@ -2664,28 +3665,95 @@ if uploaded_file:
                     mask = np.isfinite(x) & np.isfinite(y)
 
                     # Pair Plot (scatter matrix)
-                    st.write("**Pair Plot (Scatterplot Matrix)**")
+                    st.subheader("📊 Pair Plot (Scatterplot Matrix)")
+
+                    st.markdown(f"""
+                    ℹ️ **Pair Plot Explanation:**  
+                    - A **scatterplot matrix** showing all pairwise relationships between the selected variables.  
+                    - Each cell contains a scatterplot of one variable against another, allowing identification of:  
+                    1. **Linear or non-linear relationships**  
+                    2. **Clusters or patterns**  
+                    3. **Outliers** that deviate from the general trend  
+                    - Useful for **exploratory data analysis (EDA)** to visually detect correlations, trends, or unusual data points before further statistical analysis.  
+                    - Limiting to **max 6 variables** avoids overcrowding the plot and keeps it readable.
+                    """)
                     selected_vars = st.multiselect("Select variables for pairplot (max 6):", df_corr_numeric.columns.tolist(), default=df_corr_numeric.columns[:4].tolist())
                     if len(selected_vars) >= 2:
                         fig5 = sns.pairplot(df_corr_numeric[selected_vars])
                         st.pyplot(fig5)
                         st.markdown(f"ℹ️ **Pair Plot Explanation:** Matrix of scatterplots showing relationships between pairs of selected variables.")
 
+
                     # Correlogram (Filtered for |correlation| > 0.7)
-                    st.write("**Correlogram (|correlation| > 0.7)**")
+                    st.subheader("🔗 Correlogram (|correlation| > 0.7)")
+                    st.markdown(f"""
+                    ℹ️ **Correlogram Explanation:**  
+                    - A **heatmap** visualizing only the **strong correlations** (absolute value > 0.7) between numeric variables.  
+                    - Cells with NaN indicate weak or negligible correlations (|r| < 0.7).  
+                    - Helps quickly identify **highly related parameter pairs**, which may be candidates for:  
+  
+                    - Positive correlations → one color (e.g., red)  
+                    - Negative correlations → opposite color (e.g., blue)  
+                    - Useful for **exploratory data analysis (EDA)** and preparing variables for regression or clustering.
+                    """)
                     filtered_corr = corr_matrix.copy()
                     filtered_corr[abs(filtered_corr) < 0.7] = np.nan  # hide weak correlations
 
                     fig6, ax6 = plt.subplots(figsize=(12, 10))
                     sns.heatmap(filtered_corr, annot=False, cmap="vlag", ax=ax6, mask=filtered_corr.isnull())
                     st.pyplot(fig6)
-                    st.markdown(f"ℹ️ **Correlogram Explanation:** Heatmap showing only strong correlations (absolute value > 0.7). Helps identify highly related parameter pairs.")
 
     # ================================
     # Bland-Altman Plots by Parameter and Side
     # ================================
     elif analysis_type == "Bland-Altman Plots by Parameter and Side":
         st.subheader("📉 Bland-Altman Plots by Parameter and Side")
+
+        st.markdown(r"""
+        **Purpose.**  
+        Bland–Altman plots are used to assess **agreement** between two measurement methods (or two sides, e.g., right vs left foot).  
+        Instead of testing correlation, they show **bias** and **limits of agreement**.
+
+        - **Difference for each pair:**
+        $$
+        d_i = x_i - y_i
+        $$ 
+        
+        - **Mean for each pair:** 
+        $$
+        m_i = (x_i + y_i)/2
+        $$  
+        
+       - **Mean difference (bias):**  
+        $$
+        \bar{d} = \frac{1}{n} \sum_{i=1}^n d_i
+        $$  
+
+        - **Standard deviation of differences (SDr):**  
+        $$
+        s_d = \sqrt{\frac{1}{n-1} \sum_{i=1}^n (d_i - \bar{d})^2}
+        $$  
+
+        - **Limits of agreement:**  
+        $$
+        \bar{d} \pm 1.96 \cdot s_d
+        $$  
+
+        Boundaries where ~95% of differences should lie:
+        $$
+        \text{LOA}_\pm = \bar{d} \;\pm\; 1.96 \times SD_d
+        $$
+        **Interpretation:**  
+        - Bias close to 0 → good agreement between sides.  
+        - Small SDr → low variability.  
+        - Most points within ±1.96 SDr → measurements are consistent.
+        - LOA → expected range of differences. Narrower ⇒ better agreement. 
+        - SDr pooled → summarizes variation across zones/parameters (lower = more consistent agreement).  
+
+        ### ⚠️ Notes
+        - Bland–Altman is descriptive, not a formal hypothesis test.  
+        - Requires **paired measurements** on the same subjects.  
+        """)
 
         durometre_rows = {
             118: "Durometre SESA D", 119: "Durometre HALLUX D", 120: "Durometre TM5 D",
